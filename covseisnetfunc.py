@@ -155,9 +155,7 @@ def computeSpectralWidth(st, window_duration_sec, average):
 
 def getDayWaveform(folder, channel, date, ss, ss_stat):
 
-    datapath = 'data/'+folder
-   
-    print(datapath)
+    datapath = 'data/'+folder 
 
     st_jday = date.julday
     st_year = date.year
