@@ -156,7 +156,9 @@ def computeSpectralWidth(st, window_duration_sec, average):
 def getDayWaveform(folder, channel, date, ss, ss_stat):
 
     datapath = 'data/'+folder
-    
+   
+    print(datapath)
+
     st_jday = date.julday
     st_year = date.year
     
@@ -167,7 +169,8 @@ def getDayWaveform(folder, channel, date, ss, ss_stat):
 
     for root, dirs, files in os.walk(datapath+'/'+str(st_year)):
         for file in files:
-            if file.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)):
+             
+            if file.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)+'.MSEED'):
                 if ss==False:
                     st += read(root+'/'+file)
                 else:
