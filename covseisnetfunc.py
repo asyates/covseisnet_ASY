@@ -155,7 +155,7 @@ def computeSpectralWidth(st, window_duration_sec, average):
 
 def getDayWaveform(folder, channel, date, ss, ss_stat):
 
-    datapath = '/media/yatesal/Elements/SeismicData/'+folder
+    datapath = 'data/'+folder
     
     st_jday = date.julday
     st_year = date.year
@@ -209,6 +209,7 @@ def saveCovOutput(directory, date, times, freq, spectral_width, statcount):
     np.save(directory+'/'+filename, output)
 
 
+#OLD FUNCTION (NOT CURRENTLY USED)
 def getWaveformsFromDir(folder, channel, startdate,enddate):
 
     datapath = '/home/yatesal/Data/Seismic/'+folder
