@@ -52,6 +52,7 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         
         if len(st) == 0 or len(st) == 1:
             print('Error: Zero or one stream left after pre-processing, skipping day')
+            currentdate = currentdate + 86400
             continue
         else:
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Pre-processing finished, computing spectral width.')
