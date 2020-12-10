@@ -93,6 +93,8 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
     st.preprocess(domain="spectral", method=norm)
     st.preprocess(domain="temporal", method=spectral)
     st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
+    
+    return st
 
 def computeSpectralWidth(st, window_duration_sec, average):
 
