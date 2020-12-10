@@ -48,13 +48,15 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
             print(st)
 
         #pre-processing
-        preProcessStream(st, currentdate, dfac, norm, spectral)
+        st = preProcessStream(st, currentdate, dfac, norm, spectral, 0.01, 10)
         
         if len(st) == 0 or len(st) == 1:
             print('Error: Zero or one stream left after pre-processing, skipping day')
             continue
         else:
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Pre-processing finished, computing spectral width.')
+            if printstream==True:
+                print(st)
 
         #compute spectral width
         try:
@@ -69,7 +71,7 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         #increment date
         currentdate = currentdate + 86400    
   
-def preProcessStream(st, currentdate, dfac, norm, spectral):
+def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin, freqmax):
 
     #downsample data to 20 Hz 
     st.decimate(dfac)
@@ -78,13 +80,13 @@ def preProcessStream(st, currentdate, dfac, norm, spectral):
     startdatetime = UTCDateTime(currentdate.year, currentdate.month, currentdate.day)   
    
     #synchronise
-    st.synchronize(start=startdatetime, duration_sec = 86400, method="linear")
+    st = st.synchronize(start=startdatetime, duration_sec = 86400, method="linear")
 
     #remove stations with missing data
-    for tr in st:
-        if len(tr) < maxpts - 1:
-            st.remove(tr)
-            print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
+    #for tr in st:
+    #    if len(tr) < maxpts - 1:
+    #        st.remove(tr)
+    #        print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
 
     #preprocess using smooth spectral whitening and temporal normalization
     st.taper(0.05)
