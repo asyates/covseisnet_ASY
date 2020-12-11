@@ -91,8 +91,8 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
     st.taper(0.05)
     st.detrend('linear')
     st.detrend('demean')
-    st.preprocess(domain="spectral", method=norm)
-    st.preprocess(domain="temporal", method=spectral)
+    st.preprocess(domain="spectral", method=spectral)
+    st.preprocess(domain="temporal", method=norm)
     st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
     
     return st
