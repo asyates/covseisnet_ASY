@@ -108,7 +108,7 @@ def computeSpectralWidth(st, window_duration_sec, average):
     return times, frequencies, spectral_width
 
 
-def plotSpectralWidth(directory, startdate, enddate, samprate = 20, log=True, count=False, norm=False):
+def plotSpectralWidth(directory, startdate, enddate, samprate = 20, log=True, count=False, norm=False, fig=None, ax=None):
 
     startdateplot = np.datetime64(startdate)
     enddateplot = np.datetime64(enddate)
@@ -117,25 +117,32 @@ def plotSpectralWidth(directory, startdate, enddate, samprate = 20, log=True, co
 
     times, frequencies, spectral_width, statcount_all = getSpectralWidthData(directory, startdate, enddate, count)
 
+    #if no ax or fig has been passed as argument, set to show plot at end of this function
+    if ax==None or fig==None:
+        plot=True
+    else:
+        count=False
+        plot=False
+
     if norm==True:
         normalize_sw(spectral_width)
 
+    #count i.e. station count plot
     if count == True:
-        #show network covariance matrix spectral width
-       
-        fig, ax = plt.subplots(2, figsize=(12,9), constrained_layout=True, gridspec_kw={'height_ratios': [3,1]})
+               
+        fig, ax = plt.subplots(2, constrained_layout=True, gridspec_kw={'height_ratios': [3,1]})
         plot_sw(fig, ax[0], times, frequencies, spectral_width, samprate, log)
        
         days = np.arange(startdateplot, enddateplot+1)
         ax[1].bar(days, statcount_all, width=1.0, align='edge')
         ax[1].xaxis_date()
-        ax[1].set_ylabel('no. traces')
         ax[1].set_xlim(startdateplot, enddateplot+1)
     else:
-        fig, ax = plt.subplots(1, constrained_layout=True)
         plot_sw(fig, ax, times, frequencies, spectral_width, samprate, log)
 
-    plt.show()
+    if plot==True:
+        plt.show()
+
 
 def getSpectralWidthData(directory, startdate, enddate, count):
 
@@ -181,7 +188,6 @@ def plot_sw(fig, ax, times, frequencies, spectral_width, samprate, log):
     if log==True:
         ax.set_yscale('log')
 
-    fig.colorbar(img, ax=ax)
     fig.colorbar(img, ax=ax).set_label("Covariance matrix spectral width")
 
     ax.xaxis_date()
