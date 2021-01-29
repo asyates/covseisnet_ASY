@@ -29,10 +29,6 @@ def getFilters():
 
     return filtindexes, centfreqs
 
-def getAverageSNR(directory, network, stat1, stat2, stacksize, day, filt, loc, component, minlag, maxlag):
-
-    snr, ampenv, noise = compute_ccf_snr(directory, network, stat1, stat2, stacksize, day, filt=filt, norm=True, loc=loc, component=component)
-
 def plot_spectogram(inputfile, startdate, enddate, classic=True, demean=False,norm=False, Cor_norm=False, vmax=5000, fig=None, ax=None):
 
     # df=pd.read_csv('test_df_WIZ.csv',parse_dates=True,index_col=0,header=0)
@@ -131,33 +127,40 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
 
             #calculate average SNR between both lag times (positive and negative)
             snr, ampenv, noise, stack = compute_ccf_snr(noisedir, network, stat1, stat2, stacksize, day, filt=filtindexes[f], norm=True, loc=loc, component=component)
-           
-            #get snr values within SNR window (positive and negative)
-            snr_p = snr[minidx_psnr:maxidx_psnr+1]
-            snr_n = snr[maxidx_nsnr:minidx_nsnr+1]
+          
+            #check if array (i.e. not nan)
+            if isinstance(snr, (list, tuple, np.ndarray)):
 
-            #get maximum ampliude on each side of ccf, after the minimum lag time defined
-            posamp = np.max(stack[posidxamp+1:])
-            negamp = np.max(stack[:negidxamp])
+                #get snr values within SNR window (positive and negative)
+                snr_p = snr[minidx_psnr:maxidx_psnr+1]
+                snr_n = snr[maxidx_nsnr:minidx_nsnr+1]
 
-            #average both negative and positive lag time snr
-            avgSNR = np.mean([snr_p, snr_n]) 
+                #get maximum ampliude on each side of ccf, after the minimum lag time defined
+                posamp = np.max(stack[posidxamp+1:])
+                negamp = np.max(stack[:negidxamp])
 
-            #calculate amplitude difference between max of each side of CF
-            posmaxsnr = np.max(snr_p)
-            negmaxsnr = np.max(snr_n)
-            asym_snr = np.log2(posmaxsnr/negmaxsnr)
-            asym_amp = np.log2(posamp/negamp)
+                #average both negative and positive lag time snr
+                avgSNR = np.mean([snr_p, snr_n]) 
 
-            #append result for individual filter
-            snrArray[f] = avgSNR
-            
-            if plotAmpSym == True:
-                asymArray[f] = asym_amp
-                asymLabel = 'ĺog2(pos/neg) Amplitude'
+                #calculate amplitude difference between max of each side of CF
+                posmaxsnr = np.max(snr_p)
+                negmaxsnr = np.max(snr_n)
+                asym_snr = np.log2(posmaxsnr/negmaxsnr)
+                asym_amp = np.log2(posamp/negamp)
+
+                #append result for individual filter
+                snrArray[f] = avgSNR
+                
+                if plotAmpSym == True:
+                    asymArray[f] = asym_amp
+                    asymLabel = 'ĺog2(pos/neg) Amplitude'
+                else:
+                    asymArray[f] = asym_snr
+                    asymLabel = 'ĺog2(pos/neg) SNR'
+
             else:
-                asymArray[f] = asym_snr
-                asymLabel = 'ĺog2(pos/neg) SNR'
+                snrarray[f] = np.nan
+                asymArray[f] = np.nan
 
         #append result for each day
         snr_freq_array[:,d] = snrArray
@@ -255,10 +258,10 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, filt='
         #compute SNR
         snr = ampenv_resamp / noise_resamp
     else:
-        snr = np.array([np.nan])
-        ampenv_resamp = np.array([np.nan])
-        noise_resamp = np.array([np.nan])
-        stack = np.array([np.nan]) 
+        snr = np.nan
+        ampenv_resamp = np.nan
+        noise_resamp = np.nan
+        stack = np.nan 
 
     return snr, ampenv_resamp, noise_resamp, stack 
 
