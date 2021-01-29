@@ -159,7 +159,7 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
                     asymLabel = 'ĺog2(pos/neg) SNR'
 
             else:
-                snrarray[f] = np.nan
+                snrArray[f] = np.nan
                 asymArray[f] = np.nan
 
         #append result for each day
@@ -269,15 +269,15 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, filt='
 def example():
     
     #params for which data to use
-    startdate = '2006-01-01'
-    enddate = '2006-02-01'
+    startdate = '2018-03-10'
+    enddate = '2018-07-01'
 
     #params for SNR computation
-    noisedir = '/home/yatesal/msnoise/ruapehu1' #set to directory containing 'STACK' folder of interest
-    network = 'NZ'
-    loc = '10'
-    stat1 = 'NGZ'
-    stat2 = 'PKVZ' #for single-station, set to same as stat1
+    noisedir = '/home/yatesal/msnoise/kilauea1' #set to directory containing 'STACK' folder of interest
+    network = 'HV'
+    loc = '--'
+    stat1 = 'BYL'
+    stat2 = 'HAT' #for single-station, set to same as stat1
     component = 'ZZ'
     stacksize = 10 #not required to match msnoise stacksize
     fs = 25 #set to match CCFs
@@ -291,14 +291,14 @@ def example():
     CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]
 
     #param for covseisnet   
-    csndirectory = 'RUA001' #set to directory containing covseisnet output
+    csndirectory = 'KIL001' #set to directory containing covseisnet output
     plotcsn = True
 
     #param for spectrogram
-    plotspectrogram = True
+    plotspectrogram = False
     specdir='/home/yatesal/Scripts/Corentin_RSAM/output/'
-    specfname='DRZ_EHZ_2006_1_1_2007_1_1.csv' #csv file name
-    vmax = 5000 #for plotting
+    specfname='RIMD_HHZ_2008_3_1_2008_7_1.csv' #csv file name
+    vmax = 200000 #for plotting
     
     if plotspectrogram and plotcsn:
         numsubplots = 4
