@@ -250,7 +250,7 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, filt='
         avg_squared = np.mean(ccfs_1day_squared,axis=0) #take avg of squares
         squared_avg = np.square(ccf_mean) #square the average
 
-        noise = np.sqrt((avg_squared-squared_avg)/(stacksize-1))
+        noise = np.sqrt((avg_squared-squared_avg)/(len(st)-1))
         
         #smooth noise signal (with same length as earlier smooth)
         noise_smoothed = smooth(noise, window_len = sampfreq*smooth_win)
@@ -270,15 +270,15 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, filt='
 def example():
     
     #params for which data to use
-    startdate = '2018-03-10'
+    startdate = '2018-03-01'
     enddate = '2018-07-01'
 
     #params for SNR computation
     noisedir = '/home/yatesal/msnoise/kilauea1' #set to directory containing 'STACK' folder of interest
     network = 'HV'
     loc = '--'
-    stat1 = 'BYL'
-    stat2 = 'HAT' #for single-station, set to same as stat1
+    stat1 = 'UWE'
+    stat2 = 'WRM' #for single-station, set to same as stat1
     component = 'ZZ'
     stacksize = 10 #not required to match msnoise stacksize
     fs = 25 #set to match CCFs
@@ -298,7 +298,7 @@ def example():
     #param for spectrogram
     plotspectrogram = False
     specdir='/home/yatesal/Scripts/Corentin_RSAM/output/'
-    specfname='RIMD_HHZ_2008_3_1_2008_7_1.csv' #csv file name
+    specfname='FOR_HHZ_2010_9_1_2010_12_1.csv' #csv file name
     vmax = 200000 #for plotting
     
     if plotspectrogram and plotcsn:
