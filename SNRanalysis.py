@@ -153,15 +153,12 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
                 
                 if plotAmpSym == True:
                     asymArray[f] = asym_amp
-                    asymLabel = 'ĺog2(pos/neg) Amplitude'
                 else:
                     asymArray[f] = asym_snr
-                    asymLabel = 'ĺog2(pos/neg) SNR'
-
             else:
                 snrArray[f] = np.nan
                 asymArray[f] = np.nan
-
+                
         #append result for each day
         snr_freq_array[:,d] = snrArray
         asym_freq_array[:,d] = asymArray
@@ -175,8 +172,12 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
     ax[axstart].set_ylabel('Frequency (Hz)') 
 
     #get maximum value of asymmetry
-    #print(np.nanmax(np.abs(asym_freq_array)))
     maxasym = np.nanmax(np.abs(asym_freq_array)) 
+
+    if plotAmpSym == True:
+        asymLabel = 'ĺog2(pos/neg) Amplitude'
+    else:
+        asymLabel = 'ĺog2(pos/neg) SNR'
 
     img2 = ax[axstart+1].pcolormesh(ccfdates, centfreqs, asym_freq_array[:,:-1], rasterized=True, cmap="seismic", shading='auto', vmin=maxasym*-1, vmax=maxasym)
     fig.colorbar(img2, ax=ax[axstart+1]).set_label(asymLabel)
