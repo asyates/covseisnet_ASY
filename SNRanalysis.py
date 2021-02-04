@@ -33,12 +33,7 @@ def plot_spectogram(inputfile, startdate, enddate, classic=True, demean=False,no
 
     # df=pd.read_csv('test_df_WIZ.csv',parse_dates=True,index_col=0,header=0)
     df=pd.read_csv(inputfile,parse_dates=True,index_col=0,header=0)
-
-    #print(df.head())
-    #print(df.info())
-
     df=df.resample('1T').mean()
-
 
     if norm:
         row_max = df.max(axis=1)
