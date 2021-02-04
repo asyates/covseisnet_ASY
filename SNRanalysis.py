@@ -117,6 +117,10 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
     #for each day in date range:
     for d in range(len(ccfdates)):
         
+        #define booleans for errors that can occur
+        errorData = False
+        errorFS = False
+
         day = convertDatetime64ToStr(ccfdates[d])
         
         #for each filter
@@ -126,8 +130,13 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
         for f in range(len(filtlowhigh)):
 
             #calculate average SNR between both lag times (positive and negative)
-            snr, ampenv, noise, stack = compute_ccf_snr(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], norm=True, loc=loc, component=component)
+            snr, ampenv, noise, stack, errors = compute_ccf_snr(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], fs, norm=True, loc=loc, component=component)
           
+            if errors[0] == True:
+                errorData = True
+            if errors[1] == True:
+                errorFS = True
+
             #check if array (i.e. not nan)
             if isinstance(snr, (list, tuple, np.ndarray)):
 
@@ -158,7 +167,13 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
             else:
                 snrArray[f] = np.nan
                 asymArray[f] = np.nan
-                
+
+        if errorData == True:
+            print("WARNING: Data missing for stack ending "+day)
+
+        if errorFS == True:
+            print("WARNING: YOU HAVE PROVIDED A SAMPLING FREQUENCY DIFFERENT TO THOSE THE CCFs")
+
         #append result for each day
         snr_freq_array[:,d] = snrArray
         asym_freq_array[:,d] = asymArray
@@ -184,7 +199,7 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
     ax[axstart+1].set_yscale('log')
     ax[axstart+1].set_ylabel('Frequency (Hz)')
 
-def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, frange, filt='01', component='ZZ', smooth_win = 10, loc='00', norm=False):
+def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, frange, fs, filt='01', component='ZZ', smooth_win = 10, loc='00', norm=False):
 
     #directory containing stacks used in SNR computation
     stackdirpath = directory+'/STACKS/'+filt+'/001_DAYS/'+component+'/'
@@ -201,24 +216,32 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, frange
     statpair = sorted((stat1, stat2))
     statdir = network+'.'+statpair[0]+'.'+loc+'_'+network+'.'+statpair[1]+'.'+loc+'/'
 
+    #error booleans
+    errorData = False
+    errorFS = False
+    
     for ccfdate in ccfdates: 
         fname = convertDatetime64ToStr(ccfdate)+'.MSEED'
         fullpath = stackdirpath+statdir+fname
         if os.path.isfile(fullpath):
-            st += read(fullpath)
-        else:
-            print(fullpath+' missing') 
+            st += read(fullpath) 
 
     # print(st)
 
     if len(st) != 0:
        
+        if len(st) < stacksize:
+            errorData = True
+            
         st.taper(0.05)
         st.filter("bandpass", freqmin=frange[0], freqmax=frange[1], zerophase=True, corners=4)
 
         sampfreq = st[0].stats.sampling_rate
         samprate = 1.0/sampfreq
 
+        if sampfreq != fs:
+            errorFS = True
+            
         #create array of 1-day ccfs (moving from stream object to numpy array)
         ccfs_1day = np.empty(len(st), dtype=object)
         for i in range(len(st)):
@@ -267,7 +290,7 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, frange
         noise_resamp = np.nan
         stack = np.nan 
 
-    return snr, ampenv_resamp, noise_resamp, stack 
+    return snr, ampenv_resamp, noise_resamp, stack, [errorData, errorFS]  
 
 def plotSNRlagtime(directory, network, stat1, stat2, stacksize, startdate, enddate, frange, filt='01', component='ZZ', loc='00', fs=25, maxlag=120):
 
@@ -337,14 +360,14 @@ def example():
     
     #params for which data to use
     startdate = '2010-09-01'
-    enddate = '2010-12-01'
+    enddate = '2010-09-21'
 
     #params for SNR computation
     noisedir = '/home/yatesal/msnoise/piton2' #set to directory containing 'STACK' folder of interest
     network = 'YA'
     loc = '00'
-    stat1 = 'UV06'
-    stat2 = 'UV08' #for single-station, set to same as stat1
+    stat1 = 'FOR'
+    stat2 = 'UV09' #for single-station, set to same as stat1
     component = 'ZZ'
     stacksize = 10 #not required to match msnoise stacksize
     fs = 25 #set to match CCFs
@@ -362,10 +385,10 @@ def example():
     plotcsn = True
 
     #param for spectrogram
-    plotspectrogram = True
+    plotspectrogram = False
     specdir='/home/yatesal/Scripts/Corentin_RSAM/output/'
-    specfname='FOR_HHZ_2010_9_1_2010_12_1.csv' #csv file name
-    vmax = 200000 #for plotting
+    specfname='DRZ_EHZ_2006_1_1_2007_1_1.csv' #csv file name
+    vmax = 10000 #for plotting
     
     if plotspectrogram and plotcsn:
         numsubplots = 4
