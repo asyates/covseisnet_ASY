@@ -3,6 +3,20 @@
 
 import datetime
 import numpy as np
+import pandas as pd
+
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
+
 
 def convertDateStrToYearJulian(date):
     
@@ -22,6 +36,12 @@ def convertDateStrToDatetime(date):
     dt = datetime.datetime.strptime(date,fmt)
 
     return dt
+
+def convertDatetime64ToStr(date):
+
+    ts = pd.to_datetime(str(date))
+    d = ts.strftime('%Y-%m-%d')
+    return d
 
 def fillArray(value, length): 
     arr = np.zeros(length, dtype=object)
@@ -43,3 +63,34 @@ def smoothdata(data, N):
             smoothed_data[i] = np.nanmean(data[i-halfwin:i+halfwin+1])
    
     return smoothed_data
+
+def smooth(x,window_len=11,window='hanning'):
+        """smooth the data using a window with requested size.
+            
+        This method is based on the convolution of a scaled window with the signal.
+        The signal is prepared by introducing reflected copies of the signal 
+        (with the window size) in both ends so that transient parts are minimized
+         in the begining and end part of the output signal.
+                                
+        """
+        if x.ndim != 1:
+            raise(ValueError, "smooth only accepts 1 dimension arrays.")
+        if x.size < window_len:
+            raise(ValueError, "Input vector needs to be bigger than window size.")
+        if window_len<3:
+            return(x)
+
+        if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+            raise(ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'bl              ackman'")
+
+        #print window_len                                         
+        s=np.r_[x[int(window_len)-1:0:-1],x,x[-2:-int(window_len)-1:-1]]
+        #print(len(s))
+        if window == 'flat': #moving average
+            w=np.ones(window_len,'d')
+        else:
+            w=eval('np.'+window+'(window_len)')
+
+        y=np.convolve(w/w.sum(),s,mode='valid')
+        return y
+

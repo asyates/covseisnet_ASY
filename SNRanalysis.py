@@ -18,16 +18,16 @@ from scipy.signal import hilbert
 
 def getFilters():
     
-    filtindexes = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22']
+    #filtindexes = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22']
 
-    filtlowhigh = [[0.01,0.1],[0.05,0.15],[0.1,0.2],[0.15,0.25],[0.2,0.3],[0.3,0.4],[0.4,0.5],[0.5,0.6],[0.6,0.7],[0.7,0.8],[0.8,0.9],[0.9,1.0],[1.0,1.2],[1.2,1.4],[1.4,1.6],[1.6,1.8],[1.8,2.0],[2.0,2.5],[2.5,3.0],[3.0,4.0],[4.0,6.0],[6.0,10.0]]
+    filtlowhigh = [[0.01,0.1],[0.03,0.13],[0.05,0.15],[0.1,0.2],[0.15,0.25],[0.2,0.3],[0.25,0.35],[0.3,0.4],[0.4,0.5],[0.5,0.6],[0.6,0.7],[0.7,0.8],[0.8,0.9],[0.9,1.0],[1.0,1.2],[1.2,1.4],[1.4,1.6],[1.6,1.8],[1.8,2.0],[2.0,2.5],[2.5,3.0],[3.0,3.5],[3.5,4.0],[4.0,5.0],[5.0,6.0],[6.0,8.0],[8.0,10.0]]
 
-    centfreqs = np.zeros(len(filtindexes))
+    centfreqs = np.zeros(len(filtlowhigh))
     for f in range(len(filtlowhigh)):
         cf = np.mean(filtlowhigh[f])
         centfreqs[f] = cf
 
-    return filtindexes, centfreqs
+    return filtlowhigh, centfreqs
 
 def plot_spectogram(inputfile, startdate, enddate, classic=True, demean=False,norm=False, Cor_norm=False, vmax=5000, fig=None, ax=None):
 
@@ -92,7 +92,7 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
     enddateplot = np.datetime64(enddate)
    
     #get filter low and high values:
-    filtindexes, centfreqs = getFilters()
+    filtlowhigh, centfreqs = getFilters()
 
     #create date array and reading single day files
     ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
@@ -120,13 +120,13 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
         day = convertDatetime64ToStr(ccfdates[d])
         
         #for each filter
-        snrArray = np.zeros(len(filtindexes))
-        asymArray = np.zeros(len(filtindexes))
+        snrArray = np.zeros(len(filtlowhigh))
+        asymArray = np.zeros(len(filtlowhigh))
 
-        for f in range(len(filtindexes)):
+        for f in range(len(filtlowhigh)):
 
             #calculate average SNR between both lag times (positive and negative)
-            snr, ampenv, noise, stack = compute_ccf_snr(noisedir, network, stat1, stat2, stacksize, day, filt=filtindexes[f], norm=True, loc=loc, component=component)
+            snr, ampenv, noise, stack = compute_ccf_snr(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], norm=True, loc=loc, component=component)
           
             #check if array (i.e. not nan)
             if isinstance(snr, (list, tuple, np.ndarray)):
@@ -184,7 +184,7 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
     ax[axstart+1].set_yscale('log')
     ax[axstart+1].set_ylabel('Frequency (Hz)')
 
-def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, filt='01', component='ZZ', smooth_win = 10, loc='00', norm=False):
+def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, frange, filt='01', component='ZZ', smooth_win = 10, loc='00', norm=False):
 
     #directory containing stacks used in SNR computation
     stackdirpath = directory+'/STACKS/'+filt+'/001_DAYS/'+component+'/'
@@ -213,6 +213,9 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, filt='
 
     if len(st) != 0:
        
+        st.taper(0.05)
+        st.filter("bandpass", freqmin=frange[0], freqmax=frange[1], zerophase=True, corners=4)
+
         sampfreq = st[0].stats.sampling_rate
         samprate = 1.0/sampfreq
 
@@ -266,19 +269,82 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, filt='
 
     return snr, ampenv_resamp, noise_resamp, stack 
 
+def plotSNRlagtime(directory, network, stat1, stat2, stacksize, startdate, enddate, frange, filt='01', component='ZZ', loc='00', fs=25, maxlag=120):
+
+    #convert dates to UTCDatetime and designate startdate
+    enddate_dt = convertDateStrToDatetime(enddate)
+    startdate_dt = convertDateStrToDatetime(startdate)
+    startdateplot = np.datetime64(startdate)
+    enddateplot = np.datetime64(enddate)
+        
+    #create lag times array
+    samprate = 1.0/fs
+    x = np.arange(-1*maxlag, maxlag+samprate, samprate)
+    minlag=5
+    posidx = np.abs(x-minlag).argmin()
+    negidx = np.abs(x-minlag*-1).argmin()
+
+    #create date array and reading single day files
+    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    snr_array = np.empty((len(x),len(ccfdates)))
+    asym_array_amp = np.zeros(len(ccfdates))
+    asym_array_snr = np.zeros(len(ccfdates))
+    
+    #calculate SNR for each day
+    for d in range(len(ccfdates)):
+        day = convertDatetime64ToStr(ccfdates[d])
+        snr, ampenv, noise, stack = compute_ccf_snr('/home/yatesal/msnoise/'+directory, network, stat1, stat2, stacksize, day, frange, norm=True, loc=loc, component=component)
+        snr_array[:,d] = snr
+        
+        #calculate asymmetry
+        posamp = np.max(stack[posidx+1:])
+        negamp = np.max(stack[:negidx])
+
+        possnr = np.max(snr[posidx+1:])
+        negsnr = np.max(snr[:negidx])
+
+        asym_array_amp[d] = np.log2(posamp/negamp)
+        asym_array_snr[d] = np.log2(possnr/negsnr)
+
+    #plot SNR colormap
+    fig, ax = plt.subplots(2,1, figsize=(12,7))
+
+    title = network+'_'+stat1+':'+network+'_'+stat2+'('+component+', f'+filt+', m'+str(stacksize)+')'
+    fig.suptitle(title)
+
+    #choose max snr for plot
+    #vmax = np.nanmax(snr_array)
+    #print(vmax)
+    #if vmax > 20:
+    #    vmax=20
+    vmax=20
+    img = ax[0].pcolormesh(ccfdates, x, snr_array[:,:-1], rasterized=True, vmin=2, vmax=vmax, cmap="jet", shading='auto')
+    #fig.colorbar(img, ax=ax[0])
+    fig.colorbar(img, ax=ax).set_label("SNR")
+    ax[0].set_ylabel('lag time (s)')
+    ax[0].set_xlim(startdateplot,enddateplot)
+
+    ax[1].plot(ccfdates,asym_array_amp, color='black', label='amplitude')
+    ax[1].plot(ccfdates,asym_array_snr, color='red', label='snr')
+    ax[1].set_xlim(startdateplot,enddateplot)
+    ax[1].set_ylabel('log2(pos/neg)')
+    ax[1].legend() 
+
+    plt.show()
+
 
 def example():
     
     #params for which data to use
-    startdate = '2018-03-01'
-    enddate = '2018-07-01'
+    startdate = '2010-09-01'
+    enddate = '2010-12-01'
 
     #params for SNR computation
-    noisedir = '/home/yatesal/msnoise/kilauea1' #set to directory containing 'STACK' folder of interest
-    network = 'HV'
-    loc = '--'
-    stat1 = 'UWE'
-    stat2 = 'WRM' #for single-station, set to same as stat1
+    noisedir = '/home/yatesal/msnoise/piton2' #set to directory containing 'STACK' folder of interest
+    network = 'YA'
+    loc = '00'
+    stat1 = 'UV06'
+    stat2 = 'UV08' #for single-station, set to same as stat1
     component = 'ZZ'
     stacksize = 10 #not required to match msnoise stacksize
     fs = 25 #set to match CCFs
@@ -292,11 +358,11 @@ def example():
     CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]
 
     #param for covseisnet   
-    csndirectory = 'KIL001' #set to directory containing covseisnet output
+    csndirectory = 'PIT001' #set to directory containing covseisnet output
     plotcsn = True
 
     #param for spectrogram
-    plotspectrogram = False
+    plotspectrogram = True
     specdir='/home/yatesal/Scripts/Corentin_RSAM/output/'
     specfname='FOR_HHZ_2010_9_1_2010_12_1.csv' #csv file name
     vmax = 200000 #for plotting
