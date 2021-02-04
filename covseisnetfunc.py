@@ -14,7 +14,7 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 
-def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', ss=False, ss_stat='', printstream=False):
+def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', stations=[], printstream=False):
 
     currentdate = UTCDateTime(startdate)
     enddate = UTCDateTime(enddate)
@@ -30,7 +30,7 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Processing day %d, year %d, from data in folder %s' % (currentdate.julday, currentdate.year, folder))  
 
         try:
-            st = getDayWaveform(folder, channel, currentdate, ss, ss_stat)
+            st = getDayWaveform(folder, channel, currentdate, stations)
         except Exception as e:
             print('Error reading data')
             print(str(e))
@@ -200,9 +200,7 @@ def normalize_sw(spectral_width):
    for i in range(col):
         spectral_width[:,i] = spectral_width[:,i] / np.max(spectral_width[:,i])
 
-def getDayWaveform(folder, channel, date, ss, ss_stat):
-
-    datapath = 'data/'+folder 
+def getDayWaveform(datapath, channel, date, stations):
 
     st_jday = date.julday
     st_year = date.year
@@ -212,14 +210,15 @@ def getDayWaveform(folder, channel, date, ss, ss_stat):
     if channel == '*':
         channel = ''
 
-    for root, dirs, files in os.walk(datapath+'/'+str(st_year)):
-        for file in files:          
-            if file.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)+'.MSEED'):
-                if ss==False:
+    for root, dirs, files in os.walk(datapath+'/'+str(st_year)):        
+        for file in files:  
+            if file.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)):
+                if len(stations) == 0:
                     st += read(root+'/'+file)
                 else:
-                    if file.find(ss_stat) != -1:
-                        st += read(root+'/'+file)
+                    for stat in stations:
+                        if file.find(stat) != -1:
+                            st += read(root+'/'+file)
     st.merge(fill_value=0)
     
     return st   
