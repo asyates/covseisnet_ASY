@@ -354,18 +354,18 @@ def plotSNRlagtime(directory, network, stat1, stat2, stacksize, startdate, endda
 def example():
     
     #params for which data to use
-    startdate = '2010-09-01'
-    enddate = '2010-09-21'
+    startdate = '2018-03-01'
+    enddate = '2018-07-01'
 
     #params for SNR computation
-    noisedir = '/home/yatesal/msnoise/piton2' #set to directory containing 'STACK' folder of interest
-    network = 'YA'
-    loc = '00'
-    stat1 = 'FOR'
-    stat2 = 'UV09' #for single-station, set to same as stat1
+    noisedir = '/home/yatesal/msnoise/kilauea1' #set to directory containing 'STACK' folder of interest
+    network = 'HV'
+    loc = '--'
+    stat1 = 'HAT'
+    stat2 = 'OBL' #for single-station, set to same as stat1
     component = 'ZZ'
     stacksize = 10 #not required to match msnoise stacksize
-    fs = 25 #set to match CCFs
+    fs = 50 #set to match CCFs
     maxlag = 120 #set to match CCFs
 
     minlagwin = 10 #minimum lag for SNR window
@@ -376,14 +376,14 @@ def example():
     CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]
 
     #param for covseisnet   
-    csndirectory = 'PIT001' #set to directory containing covseisnet output
+    csndirectory = 'KIL001_HAT_OBL' #set to directory containing covseisnet output
     plotcsn = True
 
     #param for spectrogram
-    plotspectrogram = False
+    plotspectrogram = True
     specdir='/home/yatesal/Scripts/Corentin_RSAM/output/'
-    specfname='DRZ_EHZ_2006_1_1_2007_1_1.csv' #csv file name
-    vmax = 10000 #for plotting
+    specfname='HAT_HHZ_2018_3_1_2018_7_1.csv' #csv file name
+    vmax = 200000 #for plotting
     
     if plotspectrogram and plotcsn:
         numsubplots = 4
