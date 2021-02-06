@@ -26,7 +26,6 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
 
     for i in range(numdays):
 
-
         print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Processing day %d, year %d, from data in folder %s' % (currentdate.julday, currentdate.year, folder))  
 
         try:
@@ -73,27 +72,29 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         currentdate = currentdate + 86400    
   
 def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqmax=10):
-
-    #downsample data to 20 Hz 
-    st.decimate(dfac)
-    maxpts = len(max(st,key=len))
-   
+  
     #remove stations with missing data
-    for tr in st:
-        if len(tr) < (maxpts * 0.99): #allow 1% missing data
+    maxpts = len(max(st,key=len))
+    for tr in st:    
+        if len(tr) < (maxpts * 0.99) or getPercentZero(tr.data) > 0.01: #allow 1% missing data or less than 5% zeroed data 
             st.remove(tr)
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
 
-    #synchronise
-    st = st.synchronize(start=currentdate, duration_sec = 86400, method="linear")
+    if len(st) != 0:
 
-    #preprocess using smooth spectral whitening and temporal normalization
-    st.taper(0.05)
-    st.detrend('linear')
-    st.detrend('demean')
-    st.preprocess(domain="spectral", method=spectral)
-    st.preprocess(domain="temporal", method=norm)
-    st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
+        #downsample data
+        st.decimate(dfac)
+
+        #synchronise
+        st = st.synchronize(start=currentdate, duration_sec = 86400, method="linear")
+
+        #preprocess using smooth spectral whitening and temporal normalization
+        st.taper(0.05)
+        st.detrend('linear')
+        st.detrend('demean')
+        st.preprocess(domain="spectral", method=spectral)
+        st.preprocess(domain="temporal", method=norm)
+        st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
     
     return st
 
@@ -211,7 +212,7 @@ def getDayWaveform(datapath, channel, date, stations):
         channel = ''
 
     for root, dirs, files in os.walk(datapath+'/'+str(st_year)):        
-        for file in files:  
+        for file in files: 
             if file.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)):
                 if len(stations) == 0:
                     st += read(root+'/'+file)
@@ -219,8 +220,11 @@ def getDayWaveform(datapath, channel, date, stations):
                     for stat in stations:
                         if file.find(stat) != -1:
                             st += read(root+'/'+file)
+       
+    #print(st)  
     st.merge(fill_value=0)
-    
+    #print(st)
+
     return st   
 
 def readCovOutput(directory, date, statcount):
