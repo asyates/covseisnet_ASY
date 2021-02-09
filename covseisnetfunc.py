@@ -46,47 +46,90 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         if printstream==True:
             print(st)
 
-        #pre-processing
-        st = preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqmax=10)
+
+        #for each hour of data
+        tmpwinsize = 21600
+        numtmpwin = int(86400/tmpwinsize)
+        statcountarray = np.zeros(numtmpwin)
+        timesarray = np.empty(numtmpwin, dtype=object)
+        swarray = np.empty(numtmpwin, dtype=object)
+        tmpcount = 0
+        lstindex = -1
+
+        st.trim(starttime=currentdate,endtime=currentdate+86400,fill_value=0, pad=True)  
+
+        for tmp_st in st.slide(window_length=tmpwinsize, step=tmpwinsize):
+            
+            #pre-processing
+            tmp_st = preProcessStream(tmp_st, currentdate+(tmpcount*tmpwinsize), dfac, norm, spectral, freqmin=0.01, freqmax=10, st_size = tmpwinsize)
+            
+            if len(tmp_st) == 0 or len(tmp_st) == 1:
+                print('Error: Zero or one stream left after pre-processing, skipping day')
+                #currentdate = currentdate + 86400
+                statcountarray[tmpcount] = len(tmp_st)
+                tmpcount = tmpcount+1
+                continue
+            else:
+                print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Pre-processing finished, computing spectral width.')
+                if printstream==True:
+                    print(tmp_st)
+
+            #compute spectral width
+            try:
+                times, frequencies, spectral_width = computeSpectralWidth(tmp_st, window_duration_sec, average) 
+                
+                timesarray[tmpcount] = times + (tmpcount*tmpwinsize)
+                swarray[tmpcount] = spectral_width.T
+                statcountarray[tmpcount] = len(tmp_st)
+
+                if lstindex != -1:
+                    timesarray[lstindex] = timesarray[lstindex][:-1]
+                lstindex = tmpcount
+                
+                print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Finished computing spectral width') 
+                
+            except Exception as e:
+                print('Error computing covariance matrix / spectral width')
+                print(str(e))
+
+            tmpcount = tmpcount+1
         
-        if len(st) == 0 or len(st) == 1:
-            print('Error: Zero or one stream left after pre-processing, skipping day')
-            currentdate = currentdate + 86400
-            continue
-        else:
-            print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Pre-processing finished, computing spectral width.')
-            if printstream==True:
-                print(st)
+        timesarray = np.array([x for x in timesarray if x is not None])
+        swarray = np.array([x for x in swarray if x is not None])
 
-        #compute spectral width
-        try:
-            times, frequencies, spectral_width = computeSpectralWidth(st, window_duration_sec, average) 
-
-            print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Finished computing spectral width, saving result') 
-            saveCovOutput('outputs/'+writeoutdir, currentdate, times, frequencies, spectral_width, len(st))
-        except Exception as e:
-            print('Error computing covariance matrix / spectral width')
-            print(str(e))
+        if len(timesarray) == 0:
+            print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': No data for this day, skipping...')
+            currentdate = currentdate + 86400  
+            continue;
+        
+        print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Saving spectral width result for day')
+        times = np.hstack(timesarray)
+        spectral_width = np.hstack(swarray)
+        saveCovOutput('outputs/'+writeoutdir, currentdate, times, frequencies, spectral_width, statcountarray)
 
         #increment date
         currentdate = currentdate + 86400    
-  
-def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqmax=10):
-  
+
+    print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': ***FINISHED***')
+
+
+def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqmax=10, st_size=86400):
+ 
     #remove stations with missing data
     maxpts = len(max(st,key=len))
-    for tr in st:    
+    for tr in st:   
+        print(getPercentZero(tr.data)) 
         if len(tr) < (maxpts * 0.99) or getPercentZero(tr.data) > 0.01: #allow 1% missing data or less than 5% zeroed data 
             st.remove(tr)
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
 
     if len(st) != 0:
-
+                
         #downsample data
         st.decimate(dfac)
 
         #synchronise
-        st = st.synchronize(start=currentdate, duration_sec = 86400, method="linear")
+        st = st.synchronize(start=currentdate, duration_sec = st_size, method="linear")
 
         #preprocess using smooth spectral whitening and temporal normalization
         st.taper(0.05)
@@ -109,10 +152,10 @@ def computeSpectralWidth(st, window_duration_sec, average):
     return times, frequencies, spectral_width
 
 
-def plotSpectralWidth(directory, startdate, enddate, samprate = 20, log=True, count=False, norm=False, fig=None, ax=None):
+def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, log=True, count=False, norm=False, fig=None, ax=None):
 
     startdateplot = np.datetime64(startdate)
-    enddateplot = np.datetime64(enddate)
+    enddateplot = np.datetime64(enddate)+1
     startdate = UTCDateTime(startdate)
     enddate = UTCDateTime(enddate)
 
@@ -132,27 +175,30 @@ def plotSpectralWidth(directory, startdate, enddate, samprate = 20, log=True, co
     if count == True:
                
         fig, ax = plt.subplots(2, constrained_layout=True, gridspec_kw={'height_ratios': [3,1]})
-        plot_sw(fig, ax[0], times, frequencies, spectral_width, samprate, log)
+        plot_sw(fig, ax[0], times, frequencies, spectral_width, log)
        
-        days = np.arange(startdateplot, enddateplot+1)
-        ax[1].bar(days, statcount_all, width=1.0, align='edge')
+        days = np.arange(startdateplot, enddateplot, np.timedelta64(winlenhr, 'h'))
+        ax[1].bar(days, statcount_all, width=1.0/(24/winlenhr), align='edge')
         ax[1].xaxis_date()
-        ax[1].set_xlim(startdateplot, enddateplot+1)
+        ax[0].set_xlim(startdateplot, enddateplot)
+        ax[1].set_xlim(startdateplot, enddateplot)
     else:
-        plot_sw(fig, ax, times, frequencies, spectral_width, samprate, log)
+        if plot==True:
+            fig, ax = plt.subplots()
+        plot_sw(fig, ax, times, frequencies, spectral_width, log)
 
     if plot==True:
         plt.show()
 
 
-def getSpectralWidthData(directory, startdate, enddate, count):
+def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
 
     currentdate = startdate
     numdays = int((enddate - currentdate)/86400)+1 #+1 to include enddate
 
-    times_all = np.zeros(numdays, dtype=object)
-    sw_all = np.zeros(numdays, dtype=object)
-    statcount_all = np.zeros(numdays,dtype=object)
+    times_all = np.empty(numdays, dtype=object)
+    sw_all = np.empty(numdays, dtype=object)
+    statcount_all = np.empty(numdays,dtype=object)
     for i in range(numdays):
         try: 
             times, frequencies, spectral_width, statcount = readCovOutput(directory, currentdate, count)
@@ -160,12 +206,12 @@ def getSpectralWidthData(directory, startdate, enddate, count):
             times = np.zeros(times.shape)
             spectral_width = np.empty(spectral_width.shape)
             spectral_width[:] = np.nan
-            statcount = 0
+            statcount = np.zeros(int(24/winlenhr))
 
         currdatearr = fillArray(dates.date2num(currentdate), len(times))
         times_all[i] = currdatearr + times/86400.0
 
-        sw_all[i] = spectral_width.T
+        sw_all[i] = spectral_width
         statcount_all[i] = statcount
          
         #if appending new set of times, remove last time of previous entry (as corresponds to first of new)
@@ -176,15 +222,16 @@ def getSpectralWidthData(directory, startdate, enddate, count):
         currentdate = currentdate + 86400 
 
     #stack arrays horizontally
-    times = np.hstack(times_all)
-    spectral_width = np.hstack(sw_all)
+    times_all = np.hstack(times_all)
+    spectral_width_all = np.hstack(sw_all)
+    statcount_all = np.hstack(statcount_all)
+ 
+    return times_all, frequencies, spectral_width_all, statcount_all
 
-    return times, frequencies, spectral_width, statcount_all
-
-def plot_sw(fig, ax, times, frequencies, spectral_width, samprate, log):
+def plot_sw(fig, ax, times, frequencies, spectral_width, log, ymax=10):
 
     img = ax.pcolormesh(times, frequencies, spectral_width, rasterized=True, cmap="viridis_r", shading='auto')
-    ax.set_ylim([0.01, samprate/2])
+    ax.set_ylim([0.01, ymax])
     
     if log==True:
         ax.set_yscale('log')
@@ -222,7 +269,7 @@ def getDayWaveform(datapath, channel, date, stations):
                             st += read(root+'/'+file)
        
     #print(st)  
-    st.merge(fill_value=0)
+    st.merge(fill_value=0)   
     #print(st)
 
     return st   
