@@ -223,11 +223,11 @@ def compute_ccf_snr(directory, network, stat1, stat2, stacksize, enddate, frange
 
     # print(st)
 
+    if len(st) < stacksize:
+       errorData = True
+
     if len(st) != 0:
-       
-        if len(st) < stacksize:
-            errorData = True
-            
+                   
         st.taper(0.05)
         st.filter("bandpass", freqmin=frange[0], freqmax=frange[1], zerophase=True, corners=4)
 
@@ -411,7 +411,7 @@ def example():
         plotSpectralWidth(csndirectory, startdate, enddate, samprate = 25, log=True, count=False, norm=True, fig=fig, ax=ax[csnax])
    
     for i in range(numsubplots): 
-       ax[i].set_ylim(0.01,10)
+       ax[i].set_ylim(0.1,10)
 
     plt.show()
 
