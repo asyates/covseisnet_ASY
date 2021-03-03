@@ -64,6 +64,15 @@ def smoothdata(data, N):
    
     return smoothed_data
 
+def getPercentZero(data):
+    
+    non_zeros = np.count_nonzero(data)
+    percentzero = 1 - (float(non_zeros)/len(data))
+
+    return percentzero
+    
+
+
 def smooth(x,window_len=11,window='hanning'):
         """smooth the data using a window with requested size.
             
@@ -92,5 +101,12 @@ def smooth(x,window_len=11,window='hanning'):
             w=eval('np.'+window+'(window_len)')
 
         y=np.convolve(w/w.sum(),s,mode='valid')
-        return y
+
+        #return to original size of x
+        yfix = y[(int(window_len/2)-1):-(int(window_len/2))]
+
+        if len(yfix) > len(x):
+            yfix = yfix[1:]
+
+        return yfix
 

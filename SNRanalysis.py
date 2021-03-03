@@ -16,17 +16,41 @@ import matplotlib.colors as colors
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from scipy import signal
 from scipy.signal import hilbert
+from math import comb
+import itertools
+
+def getMSNoiseFilters():
+
+    filtindexes = ['02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28']
+
+    filtlowhigh = [[0.01,0.1],[0.03,0.13],[0.05,0.15],[0.1,0.2],[0.15,0.25],[0.2,0.3],[0.25,0.35],[0.3,0.4],[0.4,0.5],[0.5,0.6],[0.6,0.7],[0.7,0.8],[0.8,0.9],[0.9,1.0],[1.0,1.2],[1.2,1.4],[1.4,1.6],[1.6,1.8],[1.8,2.0],[2.0,2.5],[2.5,3.0],[3.0,3.5],[3.5,4.0],[4.0,5.0],[5.0,6.0],[6.0,8.0],[8.0,10.0]]
+
+    centfreqs = np.zeros(len(filtindexes))
+    for f in range(len(filtlowhigh)):
+        cf = np.mean(filtlowhigh[f])
+        centfreqs[f] = cf
+
+    return filtindexes, centfreqs
+
 
 def getFilters():
     
     #filtindexes = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22']
 
-    filtlowhigh = [[0.01,0.1],[0.03,0.13],[0.05,0.15],[0.1,0.2],[0.15,0.25],[0.2,0.3],[0.25,0.35],[0.3,0.4],[0.4,0.5],[0.5,0.6],[0.6,0.7],[0.7,0.8],[0.8,0.9],[0.9,1.0],[1.0,1.2],[1.2,1.4],[1.4,1.6],[1.6,1.8],[1.8,2.0],[2.0,2.5],[2.5,3.0],[3.0,3.5],[3.5,4.0],[4.0,5.0],[5.0,6.0],[6.0,8.0],[8.0,10.0]]
+    #filtlowhigh = [[0.01,0.1],[0.03,0.13],[0.05,0.15],[0.1,0.2],[0.15,0.25],[0.2,0.3],[0.25,0.35],[0.3,0.4],[0.4,0.5],[0.5,0.6],[0.6,0.7],[0.7,0.8],[0.8,0.9],[0.9,1.0],[1.0,1.2],[1.2,1.4],[1.4,1.6],[1.6,1.8],[1.8,2.0],[2.0,2.5],[2.5,3.0],[3.0,3.5],[3.5,4.0],[4.0,5.0],[5.0,6.0],[6.0,8.0],[8.0,10.0]]
+    
+    centfreqs = [0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
 
-    centfreqs = np.zeros(len(filtlowhigh))
-    for f in range(len(filtlowhigh)):
-        cf = np.mean(filtlowhigh[f])
-        centfreqs[f] = cf
+    filtlowhigh = np.empty(len(centfreqs), dtype=object)
+    for f in range(len(centfreqs)):
+        #flow = centfreqs[f]/(pow(pow(2,0.5),1.0/3.0))
+        #fhigh = centfreqs[f]*(pow(pow(2,0.5),1.0/3.0))
+
+        flow = centfreqs[f]/pow(2,0.5)
+        fhigh = centfreqs[f]*pow(2,0.5)
+
+
+        filtlowhigh[f] = [flow, fhigh]
 
     return filtlowhigh, centfreqs
 
@@ -118,7 +142,8 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
             #get stack corresponding to stacksize for given day, and also array of 1-day ccfs
             stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], fs, loc=loc, component=component) 
             #calculate snr of ccfs
-            snr, ampenv, noise = compute_ccf_snr(ccfarray, fs, norm=True)
+            period = 1.0/centfreqs[f]
+            snr, ampenv, noise = compute_ccf_snr(ccfarray, fs, smooth_win=period, norm=True)
        
             #check if array (i.e. not nan)
             if isinstance(snr, (list, tuple, np.ndarray)):
@@ -141,6 +166,8 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig
 
     #plot, also determining if vmin or vmax has been set
     if np.isnan(vmin) and np.isnan(vmax):
+        print('got here')
+        print(np.max(snr_freq_array[:,:-1]))
         img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto')
     elif np.isnan(vmin):
         img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap="jet", shading='auto')
@@ -217,12 +244,96 @@ def plotAmpAsymmetry(CCFparams, startdate, enddate, fig, ax):
 
     #get maximum value of asymmetry
     maxasym = np.nanmax(np.abs(asym_freq_array)) 
-    asymLabel = 'ĺog2(pos/neg) Amplitude'
+    asymLabel = 'ĺog2(pos/neg) Amp'
 
     img = ax.pcolormesh(ccfdates, centfreqs, asym_freq_array[:,:-1], rasterized=True, cmap="seismic", shading='auto', vmin=maxasym*-1, vmax=maxasym)
     fig.colorbar(img, ax=ax).set_label(asymLabel)
     ax.set_yscale('log')
     ax.set_ylabel('Frequency (Hz)')           
+
+def plotAmpEnv(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig, ax):
+    #Note that CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]   
+
+    #reassign variables
+    noisedir = CCFparams[0]
+    network = CCFparams[1]
+    loc = CCFparams[2]
+    stat1 = CCFparams[3]
+    stat2 = CCFparams[4]
+    component = CCFparams[5]
+    stacksize = CCFparams[6]
+    fs = CCFparams[7]
+    maxlag = CCFparams[8]
+
+    #convert dates to UTCDatetime and designate startdate
+    enddate_dt = convertDateStrToDatetime(enddate)
+    startdate_dt = convertDateStrToDatetime(startdate)
+    startdateplot = np.datetime64(startdate)
+    enddateplot = np.datetime64(enddate)
+   
+    #get filter low and high values:
+    filtlowhigh, centfreqs = getFilters()
+
+    #create date array and reading single day files
+    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    snr_freq_array = np.empty((len(centfreqs),len(ccfdates)))
+  
+    #create lag time array
+    samprate = 1.0/fs
+    lagtimes = np.arange(-1*maxlag, maxlag+samprate, samprate)
+    
+    #set minimum and maximum index for snr windows
+    minidx_psnr = np.abs(lagtimes-minlagwin).argmin()
+    minidx_nsnr = np.abs(lagtimes-minlagwin*-1).argmin()
+    maxidx_psnr = np.abs(lagtimes-maxlagwin).argmin()
+    maxidx_nsnr = np.abs(lagtimes-maxlagwin*-1).argmin()
+
+    #for each day in date range:
+    for d in range(len(ccfdates)):
+        
+        day = convertDatetime64ToStr(ccfdates[d])
+        
+        #for each filter
+        snrArray = np.zeros(len(filtlowhigh))
+
+        for f in range(len(filtlowhigh)):
+
+            stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], fs, loc=loc, component=component)
+
+            #get amplitude envelope of normalised CCFs 
+            period = 1.0/centfreqs[f]
+            ampenv = compute_AmpEnv(ccfarray, fs, smooth_win=period)
+        
+            #check if array (i.e. not nan)
+            if isinstance(ampenv, (list, tuple, np.ndarray)):
+
+                #get snr values within SNR window (positive and negative)
+                snr_p = ampenv[minidx_psnr:maxidx_psnr+1]
+                snr_n = ampenv[maxidx_nsnr:minidx_nsnr+1]
+ 
+                #average both negative and positive lag time snr
+                avgSNR = np.mean([snr_p, snr_n]) 
+
+                #append result for individual filter
+                snrArray[f] = avgSNR
+
+            else:
+                snrArray[f] = np.nan
+
+        #append result for each day
+        snr_freq_array[:,d] = snrArray
+   
+    #vmin = np.min(snr_freq_array[:,:-1])
+    vmin=0.1
+    vmax = np.max(snr_freq_array[:,:-1])
+
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto', norm=colors.LogNorm(vmin=vmin, vmax=vmax))
+    #fig.colorbar(img, ax=ax).set_label('ampenv  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
+    fig.colorbar(img, ax=ax).set_label('ampenv norm')
+
+    ax.set_yscale('log')
+    ax.set_ylabel('Frequency (Hz)') 
+
 
 
 def plotNormAmpEnv(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig, ax, axstart=0):
@@ -297,9 +408,173 @@ def plotNormAmpEnv(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpS
         snr_freq_array[:,d] = snrArray
     
     img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto')
-    fig.colorbar(img, ax=ax).set_label('Ampenv  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
+    #fig.colorbar(img, ax=ax).set_label('ampenv  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
+    fig.colorbar(img, ax=ax).set_label('ampenv norm')
+
     ax.set_yscale('log')
     ax.set_ylabel('Frequency (Hz)') 
+
+def plotAvgPhaseSync(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig, ax, median=True):
+    #Note that CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]   
+
+    #reassign variables
+    noisedir = CCFparams[0]
+    network = CCFparams[1]
+    loc = CCFparams[2]
+    stat1 = CCFparams[3]
+    stat2 = CCFparams[4]
+    component = CCFparams[5]
+    stacksize = CCFparams[6]
+    fs = CCFparams[7]
+    maxlag = CCFparams[8]
+
+    #convert dates to UTCDatetime and designate startdate
+    enddate_dt = convertDateStrToDatetime(enddate)
+    startdate_dt = convertDateStrToDatetime(startdate)
+    startdateplot = np.datetime64(startdate)
+    enddateplot = np.datetime64(enddate)
+   
+    #get filter low and high values:
+    filtlowhigh, centfreqs = getFilters()
+
+    #create date array and reading single day files
+    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    snr_freq_array = np.empty((len(centfreqs),len(ccfdates)))
+  
+    #create lag time array
+    samprate = 1.0/fs
+    lagtimes = np.arange(-1*maxlag, maxlag+samprate, samprate)
+    
+    #set minimum and maximum index for snr windows
+    minidx_psnr = np.abs(lagtimes-minlagwin).argmin()
+    minidx_nsnr = np.abs(lagtimes-minlagwin*-1).argmin()
+    maxidx_psnr = np.abs(lagtimes-maxlagwin).argmin()
+    maxidx_nsnr = np.abs(lagtimes-maxlagwin*-1).argmin()
+
+    #for each day in date range:
+    for d in range(len(ccfdates)):
+        
+        day = convertDatetime64ToStr(ccfdates[d])
+        
+        #for each filter
+        snrArray = np.zeros(len(filtlowhigh))
+
+        for f in range(len(filtlowhigh)):
+
+            stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], fs, loc=loc, component=component)
+
+            #get amplitude envelope of normalised CCFs 
+            ampenv = compute_AvgPhaseSync(ccfarray, fs, median=median)
+        
+            #check if array (i.e. not nan)
+            if isinstance(ampenv, (list, tuple, np.ndarray)):
+
+                #get snr values within SNR window (positive and negative)
+                snr_p = ampenv[minidx_psnr:maxidx_psnr+1]
+                snr_n = ampenv[maxidx_nsnr:minidx_nsnr+1]
+ 
+                #average both negative and positive lag time snr
+                avgSNR = np.mean([snr_p, snr_n]) 
+
+                #append result for individual filter
+                snrArray[f] = avgSNR
+
+            else:
+                snrArray[f] = np.nan
+
+        #append result for each day
+        snr_freq_array[:,d] = snrArray
+    
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto')
+    #fig.colorbar(img, ax=ax).set_label('Avg Phase Sync  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
+    fig.colorbar(img, ax=ax).set_label('AvgPS Med='+str(median))
+
+    ax.set_yscale('log')
+    ax.set_ylabel('Frequency (Hz)') 
+
+
+
+def plotPhaseSync(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig, ax):
+    #Note that CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]   
+
+    #reassign variables
+    noisedir = CCFparams[0]
+    network = CCFparams[1]
+    loc = CCFparams[2]
+    stat1 = CCFparams[3]
+    stat2 = CCFparams[4]
+    component = CCFparams[5]
+    stacksize = CCFparams[6]
+    fs = CCFparams[7]
+    maxlag = CCFparams[8]
+
+    #convert dates to UTCDatetime and designate startdate
+    enddate_dt = convertDateStrToDatetime(enddate)
+    startdate_dt = convertDateStrToDatetime(startdate)
+    startdateplot = np.datetime64(startdate)
+    enddateplot = np.datetime64(enddate)
+   
+    #get filter low and high values:
+    filtlowhigh, centfreqs = getFilters()
+    #filtindexes, centfreqs = getMSNoiseFilters()
+
+
+    #create date array and reading single day files
+    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    snr_freq_array = np.empty((len(centfreqs),len(ccfdates)))
+  
+    #create lag time array
+    samprate = 1.0/fs
+    lagtimes = np.arange(-1*maxlag, maxlag+samprate, samprate)
+    
+    #set minimum and maximum index for snr windows
+    minidx_psnr = np.abs(lagtimes-minlagwin).argmin()
+    minidx_nsnr = np.abs(lagtimes-minlagwin*-1).argmin()
+    maxidx_psnr = np.abs(lagtimes-maxlagwin).argmin()
+    maxidx_nsnr = np.abs(lagtimes-maxlagwin*-1).argmin()
+
+    #for each day in date range:
+    for d in range(len(ccfdates)):
+        
+        day = convertDatetime64ToStr(ccfdates[d])
+        
+        #for each filter
+        snrArray = np.zeros(len(filtlowhigh))
+
+        for f in range(len(filtlowhigh)):
+            
+            #get stacksize+1 because will compare two successive stacks
+            stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize+1, day, filtlowhigh[f], fs, loc=loc, component=component, filt='01')
+            
+            period=1.0/centfreqs[f]
+            phasesync = compute_PhaseSync(ccfarray, fs, smooth_win=period) 
+
+            #check if array (i.e. not nan)
+            if isinstance(phasesync, (list, tuple, np.ndarray)):
+
+                #get snr values within SNR window (positive and negative)
+                snr_p = phasesync[minidx_psnr:maxidx_psnr+1]
+                snr_n = phasesync[maxidx_nsnr:minidx_nsnr+1]
+ 
+                #average both negative and positive lag time snr
+                avgSNR = np.mean([snr_p, snr_n]) 
+
+                #append result for individual filter
+                snrArray[f] = avgSNR
+
+            else:
+                snrArray[f] = np.nan
+
+        #append result for each day
+        snr_freq_array[:,d] = snrArray
+    
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=0.8, cmap="jet", shading='auto')
+    #fig.colorbar(img, ax=ax).set_label('PhSyn betw stacks  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
+    fig.colorbar(img, ax=ax).set_label('PhSyn Stacks')
+
+    ax.set_yscale('log')
+    ax.set_ylabel('Frequency (Hz)') 
+
 
 def plotChi(CCFparams, startdate, enddate, minlagwin, maxlagwin, plotAmpSym, fig, ax):
     #Note that CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]   
@@ -399,6 +674,8 @@ def getCCFStack(directory, network, stat1, stat2, stacksize, enddate, frange, fs
         fullpath = stackdirpath+statdir+fname
         if os.path.isfile(fullpath):
             st += read(fullpath) 
+        else:
+            print(fullpath + ' missing')
 
     # print(st)
 
@@ -407,8 +684,9 @@ def getCCFStack(directory, network, stat1, stat2, stacksize, enddate, frange, fs
 
     if len(st) != 0:
                    
-        st.taper(0.05)
-        st.filter("bandpass", freqmin=frange[0], freqmax=frange[1], zerophase=True, corners=4)
+        if frange != [0.0, 0.0]:
+            st.taper(0.05)
+            st.filter("bandpass", freqmin=frange[0], freqmax=frange[1], zerophase=True, corners=4)
 
         sampfreq = st[0].stats.sampling_rate
         samprate = 1.0/sampfreq
@@ -449,8 +727,8 @@ def compute_ccf_snr(ccfarray, fs, smooth_win = 10, norm=False):
     ampenv = np.abs(analytic_signal)
     
     #smooth with hanning window
-    ampenv_smoothed = smooth(ampenv, window_len = fs*smooth_win)
-    ampenv_resamp = signal.resample(ampenv_smoothed, len(ccf_mean))
+    ampenv_smoothed = smooth(ampenv, window_len = int(fs*smooth_win))
+    #ampenv_resamp = signal.resample(ampenv_smoothed, len(ccf_mean))
 
     #compute noise signal, following Clarke et al. (2011):
     ccfarray_squared = np.square(ccfarray.tolist())      
@@ -460,13 +738,58 @@ def compute_ccf_snr(ccfarray, fs, smooth_win = 10, norm=False):
     noise = np.sqrt((avg_squared-squared_avg)/(len(ccfarray)-1))
     
     #smooth noise signal (with same length as earlier smooth)
-    noise_smoothed = smooth(noise, window_len = fs*smooth_win)
-    noise_resamp = signal.resample(noise_smoothed, len(noise))
+    noise_smoothed = smooth(noise, window_len = int(fs*smooth_win))
+    #noise_resamp = signal.resample(noise_smoothed, len(noise))
 
     #compute SNR
-    snr = ampenv_resamp / noise_resamp
+    snr = ampenv_smoothed / noise_smoothed
     
-    return snr, ampenv_resamp, noise_resamp  
+    return snr, ampenv_smoothed, noise_smoothed  
+
+def compute_PhaseSync(ccfarray, fs, smooth_win = 10):
+
+    stack2 = np.mean(ccfarray[1:].tolist(), axis=0)
+    stack1 = np.mean(ccfarray[:-1].tolist(), axis=0)
+    #print(len(ccfarray[1:]), len(ccfarray[:-1]))
+
+    taper_perc = 0.05
+    taper = signal.tukey(len(stack2), alpha=taper_perc)
+
+    stack2 = stack2 * taper
+    stack1 = stack1 * taper
+
+    s2_analytic_signal = hilbert(stack2)
+    s2_angle = np.angle(s2_analytic_signal)
+
+    s1_analytic_signal = hilbert(stack1)
+    s1_angle = np.angle(s1_analytic_signal)
+
+    phasesync = 1 - np.sin(np.abs(s2_angle-s1_angle)/2)
+    
+    phasesync_smooth = smooth(phasesync, window_len=int(fs*smooth_win))
+    #return phasesync
+    return phasesync_smooth
+
+def compute_AmpEnv(ccfarray, fs, smooth_win = 10):
+
+    #normalise ccfs
+    ccfs_max = np.max(np.abs(ccfarray.tolist()), axis=1)
+    ccfs_norm = ccfarray / ccfs_max
+
+    if len(ccfs_norm) > 0:
+        #calculate mean of these, equivalent to the N-day linear stack
+        ccf_mean = np.mean(ccfs_norm, axis=0)
+    
+        #compute amplitude envelope
+        analytic_signal = hilbert(ccf_mean)
+        ampenv = np.abs(analytic_signal)
+        
+        #smooth with hanning window
+        ampenv_smoothed = smooth(ampenv, window_len = int(fs*smooth_win))
+    else:
+        ampenv_smoothed = np.nan
+
+    return ampenv_smoothed
 
 def compute_NormAmpEnv(ccfarray, fs, smooth_win = 10):
 
@@ -481,30 +804,86 @@ def compute_NormAmpEnv(ccfarray, fs, smooth_win = 10):
         
         #taper pre-hilbert transform
         ccf_tapered = ccfarray[c] * taper
-        
+         
         #get amplitude envelope
         analytic_signal = hilbert(ccf_tapered)
         ampenv_1day = np.abs(analytic_signal)
                 
         #normalise with amplitude envelope, and apply taper again to avoid large end values
         ccfnorm = np.divide(ccfarray[c],ampenv_1day) * taper       
+        #ccfnorm = ccfarray[c] / (np.abs(ccfarray[c])+1e-10)
+        #ccfnorm = angle
         ccfs_norm[c] = ccfnorm
 
     if len(ccfs_norm) > 0:
         #calculate mean of these, equivalent to the N-day linear stack
         ccf_mean = np.mean(ccfs_norm, axis=0)
-        
+    
         #compute amplitude envelope
         analytic_signal = hilbert(ccf_mean)
         ampenv = np.abs(analytic_signal)
         
         #smooth with hanning window
         ampenv_smoothed = smooth(ampenv, window_len = fs*smooth_win)
-        ampenv_resamp = signal.resample(ampenv_smoothed, len(ccf_mean))
+        #ampenv_resamp = signal.resample(ampenv_smoothed, len(ccf_mean))
     else:
-        ampenv_resample = np.nan
+        ampenv_smoothed = np.nan
 
-    return ampenv_resamp
+    return ampenv_smoothed
+
+def compute_AvgPhaseSync(ccfarray, fs, smooth_win = 10, median=True):
+
+    #define taper prior to normalising each ccf by its amplitude envelope
+    taper_perc = 0.1 
+    taper = signal.tukey(len(ccfarray[0]), alpha=taper_perc)
+
+    #array for normalised ccfs
+    ccfs_norm = np.empty(len(ccfarray), dtype=object)
+
+    for c in range(len(ccfs_norm)):
+        
+        #taper pre-hilbert transform
+        ccf_tapered = ccfarray[c] * taper
+        
+        #get phase angle
+        analytic_signal = hilbert(ccf_tapered)
+        angle = np.angle(analytic_signal)
+
+        ccfnorm = angle
+        ccfs_norm[c] = ccfnorm
+
+    if len(ccfs_norm) > 0:
+        
+        #calculate mean of these, equivalent to the N-day linear stack
+        #ccf_mean = np.mean(ccfs_norm, axis=0)
+    
+        nopairs = comb(len(ccfs_norm), 2)
+        diffarray = np.empty(nopairs, dtype=object)
+        paircount = 0
+        for pair in itertools.combinations(ccfs_norm, 2):
+            diffarray[paircount] = 1 - np.sin(np.abs(pair[0]-pair[1])/2)
+            paircount += 1
+
+        if median==True:
+            avgdiff = np.median(diffarray.tolist(), axis=0)        
+        else:
+            avgdiff = np.mean(diffarray.tolist(), axis=0)
+        #std = np.std(diffarray.tolist(), axis=0)
+        ampenv = avgdiff
+
+        #compute amplitude envelope
+        #analytic_signal = hilbert(ccf_mean)
+        #ampenv = np.abs(analytic_signal)
+        
+        #smooth with hanning window
+        ampenv_smoothed = smooth(ampenv, window_len = fs*smooth_win)
+        #ampenv_resamp = signal.resample(ampenv_smoothed, len(ccf_mean))
+    else:
+        ampenv_resamp = np.nan
+
+    return ampenv_smoothed
+
+
 
 def compute_chi(directory, network, stat1, stat2, stacksize, enddate, frange, fs, minlagwin, maxlagwin, filt='01', component='ZZ', smooth_win = 10, loc='00', maxlag=120, norm=False):
 
