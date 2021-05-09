@@ -4,6 +4,7 @@
 import datetime
 import numpy as np
 import pandas as pd
+from math import sin, cos, sqrt, atan2, radians
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
@@ -110,3 +111,22 @@ def smooth(x,window_len=11,window='hanning'):
 
         return yfix
 
+def getDistance(lat1, lon1, lat2, lon2):
+    #return distance between two points in km
+
+    R = 6373.0
+
+    lat1 = radians(lat1)
+    lon1 = radians(lon1)
+    lat2 = radians(lat2)
+    lon2 = radians(lon2)
+
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+
+    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    distance = R * c
+
+    return distance
