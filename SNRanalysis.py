@@ -78,17 +78,17 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=No
 
             #get stack corresponding to stacksize for given day, and also array of 1-day ccfs
             stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], fs, loc=loc, component=component, stacksuffix=stacksuffix) 
-            
-            #calculate snr of ccfs
-            period = 1.0/centfreqs[f]
-            snr, ampenv, noise = compute_ccf_snr(ccfarray, fs, smooth_win=period, norm=norm)
-       
+                   
             #check if array (i.e. not nan)
-            if isinstance(snr, (list, tuple, np.ndarray)):
+            if isinstance(stack, (list, tuple, np.ndarray)):
                 
+                #calculate snr of ccfs
+                period = 1.0/centfreqs[f]
+                snr, ampenv, noise = compute_ccf_snr(ccfarray, fs, smooth_win=period, norm=norm)
+
                 if maxlagwin == None:
                     #print(period)
-                    maxlagwin0 = int(minlagwin + period*15)
+                    maxlagwin0 = int(minlagwin + period*10)
                 else:
                     maxlagwin0 = maxlagwin
 
@@ -116,7 +116,11 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=No
     #plot, also determining if vmin or vmax has been set
     if np.isnan(vmin) and np.isnan(vmax):
         #print(np.max(snr_freq_array[:,:-1]))
-        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto')
+
+        #vmin=0
+        vmax = np.nanquantile(snr_freq_array[:,:-1],0.999)
+
+        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap="jet", shading='auto')
     elif np.isnan(vmin):
         img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap="jet", shading='auto')
     elif np.isnan(vmax):
@@ -218,7 +222,6 @@ def plotAmpAsymmetry(CCFparams, startdate, enddate, fig=None, ax=None, stacksuff
                 asymArray[f] = asym_amp
 
             else:
-                snrArray[f] = np.nan
                 asymArray[f] = np.nan
 
         #append result for each day
@@ -226,7 +229,7 @@ def plotAmpAsymmetry(CCFparams, startdate, enddate, fig=None, ax=None, stacksuff
 
     #get maximum value of asymmetry
     maxasym = np.nanmax(np.abs(asym_freq_array)) 
-    asymLabel = 'Amplitude Ratio (log$_{2}$)'
+    asymLabel = 'Amp. Ratio (log$_{2}$)'
 
     img = ax.pcolormesh(ccfdates, centfreqs, asym_freq_array[:,:-1], rasterized=True, cmap="seismic", shading='auto', vmin=maxasym*-1, vmax=maxasym)
     fig.colorbar(img, ax=ax).set_label(asymLabel)
@@ -293,18 +296,18 @@ def plotPhaseStack(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None
 
         for f in range(len(filtlowhigh)):
             
-            #get stacksize+1 because will compare two successive stacks
-            stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], fs, loc=loc, component=component, stacksuffix=stacksuffix, filt='01')
             
-            period=1.0/centfreqs[f]
-            phasestack = compute_PhaseStack(ccfarray, fs, smooth_win=period) 
-
+            stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, filtlowhigh[f], fs, loc=loc, component=component, stacksuffix=stacksuffix, filt='01')
+             
             #check if array (i.e. not nan)
-            if isinstance(phasestack, (list, tuple, np.ndarray)):
+            if isinstance(stack, (list, tuple, np.ndarray)):
+
+                period=1.0/centfreqs[f]
+                phasestack = compute_PhaseStack(ccfarray, fs, smooth_win=period) 
 
                 if maxlagwin == None:
                     #print(period)
-                    maxlagwin0 = int(minlagwin + period*15)
+                    maxlagwin0 = int(minlagwin + period*10)
                 else:
                     maxlagwin0 = maxlagwin
 
@@ -327,16 +330,149 @@ def plotPhaseStack(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None
         #append result for each day
         snr_freq_array[:,d] = snrArray
     
-    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto')
+    #vmin=0.25
+    vmax = np.nanquantile(snr_freq_array[:,:-1],0.999)
+
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto', vmax=vmax)
     #fig.colorbar(img, ax=ax).set_label('PhSyn betw stacks  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
-    fig.colorbar(img, ax=ax).set_label('Phase Stacks')
+    fig.colorbar(img, ax=ax).set_label('Phase Stack Amp')
 
     ax.set_yscale('log')
     ax.set_ylabel('Frequency (Hz)') 
 
     if plot==True:
         plt.show()
+
+
+def plotStackCC(CCFparams, startdate, enddate, minlagwin, maxlagwin, maxstack=5, fig=None, ax=None, stacksuffix=''):
+
+    #Note that CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]   
+
+    #reassign variables
+    noisedir = CCFparams[0]
+    network = CCFparams[1]
+    loc = CCFparams[2]
+    stat1 = CCFparams[3]
+    stat2 = CCFparams[4]
+    component = CCFparams[5]
+    stacksize = CCFparams[6]
+    fs = CCFparams[7]
+    maxlag = CCFparams[8]
+
+    #convert dates to UTCDatetime and designate startdate
+    enddate_dt = convertDateStrToDatetime(enddate)
+    startdate_dt = convertDateStrToDatetime(startdate)
+    startdateplot = np.datetime64(startdate)
+    enddateplot = np.datetime64(enddate)
+   
+    #get filter low and high values:
+    filtlowhigh, centfreqs = getFilters()
+    
+
+    #create date array and reading single day files
+    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    snr_freq_array = np.empty((len(centfreqs),len(ccfdates)))
   
+    #create lag time array
+    samprate = 1.0/fs
+    lagtimes = np.arange(-1*maxlag, maxlag+samprate, samprate)
+    
+    #set minimum and maximum index for snr windows
+    minidx_psnr = np.abs(lagtimes-minlagwin).argmin()
+    minidx_nsnr = np.abs(lagtimes-minlagwin*-1).argmin()
+    
+    if fig == None or ax == None:
+        fig, ax = plt.subplots(figsize=(11,4))
+        plot=True
+    else:
+        plot=False
+
+    #set CC threshold
+    cc_thres = 0.99
+    
+    #for each day in date range:
+    for d in range(len(ccfdates)):
+        
+        day = convertDatetime64ToStr(ccfdates[d])
+        
+        #for each filter
+        snrArray = np.zeros(len(filtlowhigh))
+
+        for f in range(len(filtlowhigh)):
+
+            period=1.0/centfreqs[f]
+
+            if maxlagwin == None:
+                #print(period)
+                maxlagwin0 = int(minlagwin + period*15)
+            else:
+                maxlagwin0 = maxlagwin
+
+            maxidx_psnr = np.abs(lagtimes-maxlagwin0).argmin()
+            maxidx_nsnr = np.abs(lagtimes-maxlagwin0*-1).argmin()
+
+            cc_curr = 0
+            ccf_count = 1
+
+            #get stack of max stacksize
+            stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, maxstack, day, filtlowhigh[f], fs, loc=loc, component=component, stacksuffix=stacksuffix, filt='01') 
+           
+            #slice individual arrays to be just times of interest
+            ccfarray_p = [ccfarray[i][minidx_psnr:maxidx_psnr+1] for i in range(len(ccfarray))]
+            ccfarray_n = [ccfarray[i][maxidx_nsnr:minidx_nsnr+1] for i in range(len(ccfarray))]
+
+            #recombine 
+            ccfarray_new = np.concatenate((ccfarray_n, ccfarray_p), axis = 1)
+
+
+            while cc_curr < cc_thres:
+
+                ccf_count += 1 #increment count
+
+                #get stacksize+1 because will compare two successive stacks
+                #stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, ccf_count, day, filtlowhigh[f], fs, loc=loc, component=component, stacksuffix=stacksuffix, filt='01') 
+
+                stcf0 = np.mean(ccfarray_new[(-1*ccf_count):], axis=0)
+                stcf1 = np.mean(ccfarray_new[(-1*(ccf_count-1)):], axis=0)                 
+
+                #get values of stcf0 within min and max lag time (positive and negative)
+                #stcf0_p = stcf0[minidx_psnr:maxidx_psnr+1]
+                #stcf0_n = stcf0[maxidx_nsnr:minidx_nsnr+1]
+                #stcf0_new = np.concatenate((stcf0_n, stcf0_p), axis=None)
+
+                #get values of stcf0 within min and max lag time (positive and negative)
+                #stcf1_p = stcf1[minidx_psnr:maxidx_psnr+1]
+                #stcf1_n = stcf1[maxidx_nsnr:minidx_nsnr+1]
+                #stcf1_new = np.concatenate((stcf1_n, stcf1_p), axis=None)
+
+                cc_curr = np.corrcoef(stcf0, stcf1)[1,0]
+                
+                if ccf_count >= maxstack:
+                    break
+
+
+            #append result for individual filter
+            snrArray[f] = ccf_count
+
+            print(f, day)
+
+        #append result for each day
+        snr_freq_array[:,d] = snrArray
+
+
+
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=2, cmap="gist_rainbow", shading='auto')
+    #fig.colorbar(img, ax=ax).set_label('PhSyn betw stacks  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
+    fig.colorbar(img, ax=ax).set_label('Stacksize (CC = '+str(cc_thres)+')')
+
+    ax.set_yscale('log')
+    ax.set_ylabel('Frequency (Hz)')
+
+    if plot==True:
+        plt.show()
+
+
+
 def getCCFStack(directory, network, stat1, stat2, stacksize, enddate, frange, fs, filt='01', component='ZZ', loc='00', stacksuffix=''):
     #return stack of 1-day ccfs corresponding to stacksize and enddate, and also the individual 1-day CCFs (after filtering)
 
