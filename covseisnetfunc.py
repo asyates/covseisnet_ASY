@@ -13,6 +13,16 @@ from obspy import read
 import numpy as np
 import os
 from datetime import datetime, timedelta
+import math
+from matplotlib.ticker import (MultipleLocator)
+import matplotlib.font_manager
+
+
+plt.rcParams["font.family"] = 'sans-serif'
+plt.rcParams["font.sans-serif"] = ['Verdana']
+plt.rcParams['axes.linewidth']=1
+
+workdir = '/home/yatesal/covseisnet_ASY/'
 
 def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', stations=[], printstream=False):
 
@@ -117,8 +127,9 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
  
     #remove stations with missing data
     maxpts = len(max(st,key=len))
-    for tr in st:   
-        print(getPercentZero(tr.data)) 
+    for tr in st:
+        #print(tr)
+        #print(getPercentZero(tr.data))    
         if len(tr) < (maxpts * 0.99) or getPercentZero(tr.data) > 0.01: #allow 1% missing data or less than 5% zeroed data 
             st.remove(tr)
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
@@ -132,13 +143,20 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
         st = st.synchronize(start=currentdate, duration_sec = st_size, method="linear")
 
         #preprocess using smooth spectral whitening and temporal normalization
-        st.taper(0.05)
+        st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
         st.detrend('linear')
         st.detrend('demean')
-        st.preprocess(domain="spectral", method=spectral)
-        st.preprocess(domain="temporal", method=norm)
-        st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
-    
+        st.taper(0.05)
+        if spectral != None:
+            st.preprocess(domain="spectral", method=spectral)
+        else:
+            print('skipping spectral whitening')
+
+        if norm != None:
+            st.preprocess(domain="temporal", method=norm)
+        else:
+            print('skipping temporal normalization')
+            
     return st
 
 def computeSpectralWidth(st, window_duration_sec, average):
@@ -174,22 +192,71 @@ def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, log=True, count
     #count i.e. station count plot
     if count == True:
                
-        fig, ax = plt.subplots(2, constrained_layout=True, gridspec_kw={'height_ratios': [3,1]})
+        fig, ax = plt.subplots(2, constrained_layout=True, figsize=(8,4), gridspec_kw={'height_ratios': [3.0,1]})
         plot_sw(fig, ax[0], times, frequencies, spectral_width, log)
        
         days = np.arange(startdateplot, enddateplot, np.timedelta64(winlenhr, 'h'))
-        ax[1].bar(days, statcount_all, width=1.0/(24/winlenhr), align='edge')
+        ax[1].bar(days, statcount_all, width=1.0/(24/winlenhr), align='edge',color='grey')
         ax[1].xaxis_date()
+        ax[1].set_ylabel('Trace Count')
         ax[0].set_xlim(startdateplot, enddateplot)
         ax[1].set_xlim(startdateplot, enddateplot)
+
+        #set ylim on trace count
+        trcnt_max = np.max(statcount_all)
+        ybasemult=5.0
+        ax[1].set_ylim(0,ybasemult * math.ceil(trcnt_max/ybasemult)) 
+
+        ax[0].xaxis.set_major_locator(dates.MonthLocator(interval=1))
+        ax[1].xaxis.set_major_locator(dates.MonthLocator(interval=1))
+        ax[0].xaxis.set_minor_locator(dates.DayLocator(interval=1))
+        ax[1].xaxis.set_minor_locator(dates.DayLocator(interval=1))
+
+        ax[1].yaxis.set_major_locator(MultipleLocator(5))
+
     else:
         if plot==True:
-            fig, ax = plt.subplots()
+            fig, ax = plt.subplots(figsize=(11,4))
         plot_sw(fig, ax, times, frequencies, spectral_width, log)
 
     if plot==True:
         plt.show()
 
+def plotTraceCount(directory, startdate, enddate, fig=None, ax=None, winlenhr=6):
+
+    startdateplot = np.datetime64(startdate)
+    enddateplot = np.datetime64(enddate)+1
+    startdate = UTCDateTime(startdate)
+    enddate = UTCDateTime(enddate)
+
+    times, frequencies, spectral_width, statcount_all = getSpectralWidthData(directory, startdate, enddate, True)
+   
+    days = np.arange(startdateplot, enddateplot, np.timedelta64(winlenhr, 'h'))
+  
+    if fig == None or ax == None:
+        fig, ax = plt.subplots()
+        plot=True
+    else:
+        plot=False
+
+
+    ax.bar(days, statcount_all, width=1.0/(24/winlenhr), align='edge',color='grey')
+    ax.xaxis_date()
+    ax.set_ylabel('Trace Count')
+    ax.set_xlim(startdateplot, enddateplot)
+
+    #set ylim on trace count
+    #trcnt_max = np.max(statcount_all)
+    #ybasemult=5.0
+    #ax.set_ylim(0,ybasemult * math.ceil(trcnt_max/ybasemult)) 
+
+    if plot == True:
+        plt.show()
+
+    #ax.xaxis.set_major_locator(dates.MonthLocator(interval=1))
+    #ax.xaxis.set_minor_locator(dates.DayLocator(interval=1))
+
+    #ax.yaxis.set_major_locator(MultipleLocator(5))
 
 def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
 
@@ -228,18 +295,19 @@ def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
  
     return times_all, frequencies, spectral_width_all, statcount_all
 
+
 def plot_sw(fig, ax, times, frequencies, spectral_width, log, ymax=10):
 
-    img = ax.pcolormesh(times, frequencies, spectral_width, rasterized=True, cmap="viridis_r", shading='auto')
+    img = ax.pcolormesh(times, frequencies, spectral_width, rasterized=True, cmap="viridis_r", shading='auto') #viridis_r
     ax.set_ylim([0.01, ymax])
     
     if log==True:
         ax.set_yscale('log')
 
-    fig.colorbar(img, ax=ax).set_label("Covariance matrix spectral width")
+    fig.colorbar(img, ax=ax).set_label("Spectral width")
 
     ax.xaxis_date()
-    ax.set_xlabel("Time")
+    #ax.set_xlabel("Time")
     ax.set_ylabel("Frequency (Hz)")
 
 def normalize_sw(spectral_width):
@@ -277,8 +345,9 @@ def getDayWaveform(datapath, channel, date, stations):
 def readCovOutput(directory, date, statcount):
         
     filename = str(date.year)+'_'+str(date.julday)+'.npy'
-    covresult = np.load('outputs/'+directory+'/'+filename, allow_pickle=True)
- 
+    #print(filename)
+    covresult = np.load(workdir+'outputs/'+directory+'/'+filename, allow_pickle=True)        
+
     times = covresult[0]
     frequencies = covresult[1]
     spectral_width = covresult[2]
