@@ -157,7 +157,6 @@ def getFilters():
 
     return filtlowhigh, centfreqs
 
-
 def plotAmpAsymmetry(CCFparams, startdate, enddate, fig=None, ax=None, stacksuffix='', minlag = 5):
 
     #reassign variables
@@ -606,6 +605,62 @@ def compute_PhaseStack(ccfarray, fs, smooth_win = 10, median=True):
         ampenv_smoothed = np.nan
 
     return ampenv_smoothed
+
+def plotInterferogram(CCFparams, startdate, enddate, frange, fig=None, ax=None, stacksuffix=''):
+
+    #reassign variables
+    noisedir = CCFparams[0]
+    network = CCFparams[1]
+    loc = CCFparams[2]
+    stat1 = CCFparams[3]
+    stat2 = CCFparams[4]
+    component = CCFparams[5]
+    stacksize = CCFparams[6]
+    fs = CCFparams[7]
+    maxlag = CCFparams[8]
+
+    #convert dates to UTCDatetime and designate startdate
+    enddate_dt = convertDateStrToDatetime(enddate)
+    startdate_dt = convertDateStrToDatetime(startdate)
+    startdateplot = np.datetime64(startdate)
+    enddateplot = np.datetime64(enddate)
+
+    #create lag time array
+    samprate = 1.0/fs
+    lagtimes = np.arange(-1*maxlag, maxlag+samprate, samprate)
+
+    #create date array and reading single day files
+    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    ccf_array = np.empty((len(lagtimes),len(ccfdates)))
+
+    #calculate SNR for each day
+    for d in range(len(ccfdates)):
+        day = convertDatetime64ToStr(ccfdates[d])
+
+        #get stack corresponding to stacksize for given day, and also array of 1-day ccfs
+        stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix) 
+        
+        ccf_array[:,d] = stack
+
+    #define the 99% percentile of data for visualisation purposes
+    clim = np.nanpercentile(ccf_array, 99)
+
+    if fig == None or ax == None:
+        fig, ax = plt.subplots(figsize=(12,8))
+        plot = True
+    else:
+        plot = False
+
+    img = ax.pcolormesh(ccfdates, lagtimes, ccf_array[:,:-1], vmin=-clim, vmax=clim, rasterized=True, cmap='seismic')
+    fig.colorbar(img, ax=ax).set_label('')
+    
+    #plt.colorbar()
+    ax.set_title('Interferogram')
+    ax.set_ylabel('Lag Time (s)')
+    ax.set_xlim(np.datetime64(startdate), np.datetime64(enddate))
+
+    if plot == True:
+        plt.show()
 
 
 
