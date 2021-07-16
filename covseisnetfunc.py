@@ -207,10 +207,10 @@ def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, log=True, count
         ybasemult=5.0
         ax[1].set_ylim(0,ybasemult * math.ceil(trcnt_max/ybasemult)) 
 
-        ax[0].xaxis.set_major_locator(dates.MonthLocator(interval=1))
-        ax[1].xaxis.set_major_locator(dates.MonthLocator(interval=1))
-        ax[0].xaxis.set_minor_locator(dates.DayLocator(interval=1))
-        ax[1].xaxis.set_minor_locator(dates.DayLocator(interval=1))
+        #ax[0].xaxis.set_major_locator(dates.MonthLocator(interval=1))
+        #ax[1].xaxis.set_major_locator(dates.MonthLocator(interval=1))
+        #ax[0].xaxis.set_minor_locator(dates.DayLocator(interval=1))
+        #ax[1].xaxis.set_minor_locator(dates.DayLocator(interval=1))
 
         ax[1].yaxis.set_major_locator(MultipleLocator(5))
 
@@ -275,7 +275,7 @@ def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
             spectral_width[:] = np.nan
             statcount = np.zeros(int(24/winlenhr))
 
-        currdatearr = fillArray(dates.date2num(currentdate), len(times))
+        currdatearr = fillArray(dates.date2num(currentdate.datetime), len(times))
         times_all[i] = currdatearr + times/86400.0
 
         sw_all[i] = spectral_width
