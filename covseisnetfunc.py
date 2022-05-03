@@ -24,7 +24,7 @@ plt.rcParams['axes.linewidth']=1
 
 workdir = '/home/yatesal/covseisnet_ASY/'
 
-def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', stations=[], printstream=False):
+def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', stations=[], printstream=False, freqmin=0.01, freqmax=10.0):
 
     currentdate = UTCDateTime(startdate)
     enddate = UTCDateTime(enddate)
@@ -57,7 +57,7 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
             print(st)
 
 
-        #for each hour of data
+        #split data into subdaily chunks (here, currently 6 hours)
         tmpwinsize = 21600
         numtmpwin = int(86400/tmpwinsize)
         statcountarray = np.zeros(numtmpwin)
@@ -68,10 +68,12 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
 
         st.trim(starttime=currentdate,endtime=currentdate+86400,fill_value=0, pad=True)  
 
+        #process smaller chunks of data
         for tmp_st in st.slide(window_length=tmpwinsize, step=tmpwinsize):
-            
+            print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Processing %.2f hour time slice.' % (tmpwinsize/3600.0)) 
+
             #pre-processing
-            tmp_st = preProcessStream(tmp_st, currentdate+(tmpcount*tmpwinsize), dfac, norm, spectral, freqmin=0.01, freqmax=10, st_size = tmpwinsize)
+            tmp_st = preProcessStream(tmp_st, currentdate+(tmpcount*tmpwinsize), dfac, norm, spectral, freqmin=freqmin, freqmax=freqmax, st_size = tmpwinsize)
             
             if len(tmp_st) == 0 or len(tmp_st) == 1:
                 print('Error: Zero or one stream left after pre-processing, skipping day')
@@ -130,7 +132,7 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
     for tr in st:
         #print(tr)
         #print(getPercentZero(tr.data))    
-        if len(tr) < (maxpts * 0.99) or getPercentZero(tr.data) > 0.01: #allow 1% missing data or less than 5% zeroed data 
+        if len(tr) < (maxpts * 0.95) or getPercentZero(tr.data) > 0.05: #allow 5% missing data or less than 5% zeroed data 
             st.remove(tr)
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
 
@@ -147,6 +149,11 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
         st.detrend('linear')
         st.detrend('demean')
         st.taper(0.05)
+
+        #fig, ax = plt.subplots()
+        #ax.plot(np.arange(len(st[0].data)),st[0].data)
+        #plt.show()
+
         if spectral != None:
             st.preprocess(domain="spectral", method=spectral)
         else:
@@ -170,7 +177,7 @@ def computeSpectralWidth(st, window_duration_sec, average):
     return times, frequencies, spectral_width
 
 
-def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, log=True, count=False, norm=False, fig=None, ax=None):
+def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, vmin=None, vmax=None, log=True, count=False, norm=False, fig=None, ax=None, ax_cb=None):
 
     startdateplot = np.datetime64(startdate)
     enddateplot = np.datetime64(enddate)+1
@@ -192,8 +199,8 @@ def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, log=True, count
     #count i.e. station count plot
     if count == True:
                
-        fig, ax = plt.subplots(2, constrained_layout=True, figsize=(8,4), gridspec_kw={'height_ratios': [3.0,1]})
-        plot_sw(fig, ax[0], times, frequencies, spectral_width, log)
+        fig, ax = plt.subplots(2, constrained_layout=True, figsize=(12,6), gridspec_kw={'height_ratios': [3.0,1]})
+        plot_sw(fig, ax[0], times, frequencies, spectral_width, log, norm=norm, ax_cb=ax_cb, vmin=vmin, vmax=vmax)
        
         days = np.arange(startdateplot, enddateplot, np.timedelta64(winlenhr, 'h'))
         ax[1].bar(days, statcount_all, width=1.0/(24/winlenhr), align='edge',color='grey')
@@ -216,8 +223,8 @@ def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, log=True, count
 
     else:
         if plot==True:
-            fig, ax = plt.subplots(figsize=(11,4))
-        plot_sw(fig, ax, times, frequencies, spectral_width, log)
+            fig, ax = plt.subplots(figsize=(12,4))
+        plot_sw(fig, ax, times, frequencies, spectral_width, log, norm=norm, ax_cb = ax_cb, vmin=vmin, vmax=vmax)
 
     if plot==True:
         plt.show()
@@ -296,19 +303,42 @@ def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
     return times_all, frequencies, spectral_width_all, statcount_all
 
 
-def plot_sw(fig, ax, times, frequencies, spectral_width, log, ymax=10):
+def plot_sw(fig, ax, times, frequencies, spectral_width, log, vmin=None, vmax=None, ymax=10, norm=False, ax_cb=None):
+   
+    cmap='RdYlBu' 
+    
+    if vmin == None:
+        vmin=np.min(spectral_width)
+    if vmax == None:
+        vmax=np.max(spectral_width)
 
-    img = ax.pcolormesh(times, frequencies, spectral_width, rasterized=True, cmap="viridis_r", shading='auto') #viridis_r
+    img = ax.pcolormesh(times, frequencies, spectral_width, rasterized=True, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto') #viridis_r
     ax.set_ylim([0.01, ymax])
     
     if log==True:
         ax.set_yscale('log')
 
-    fig.colorbar(img, ax=ax).set_label("Spectral width")
+    if norm==True:
+        
+        if ax_cb == None:
+            fig.colorbar(img, ax=ax).set_label("Norm Spectral Width")
+        else:
+            fig.colorbar(img, cax=ax_cb).set_label("Norm Spectral Width")
+    else:
+        if ax_cb == None:
+            fig.colorbar(img, ax=ax).set_label("Spectral width")
+        else:
+            fig.colorbar(img, cax=ax_cb).set_label("Spectral width")
 
     ax.xaxis_date()
     #ax.set_xlabel("Time")
     ax.set_ylabel("Frequency (Hz)")
+
+    #ax.xaxis.set_major_locator(dates.MonthLocator(interval=1))
+    #ax.xaxis.set_major_locator(dates.MonthLocator(interval=1))
+    #ax.xaxis.set_minor_locator(dates.DayLocator(interval=1))
+    #ax.xaxis.set_minor_locator(dates.DayLocator(interval=1))
+
 
 def normalize_sw(spectral_width):
 
@@ -337,6 +367,9 @@ def getDayWaveform(datapath, channel, date, stations):
                             st += read(root+'/'+file)
        
     #print(st)  
+    st.detrend('linear')
+    st.detrend('demean')
+
     st.merge(fill_value=0)   
     #print(st)
 
