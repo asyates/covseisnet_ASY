@@ -5,6 +5,8 @@ import datetime
 import numpy as np
 import pandas as pd
 from math import sin, cos, sqrt, atan2, radians
+from scipy.signal import butter, lfilter
+
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
