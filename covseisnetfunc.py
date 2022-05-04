@@ -308,9 +308,9 @@ def plot_sw(fig, ax, times, frequencies, spectral_width, log, vmin=None, vmax=No
     cmap='RdYlBu' 
     
     if vmin == None:
-        vmin=np.min(spectral_width)
+        vmin=np.nanmin(spectral_width)
     if vmax == None:
-        vmax=np.max(spectral_width)
+        vmax=np.nanmax(spectral_width)
 
     img = ax.pcolormesh(times, frequencies, spectral_width, rasterized=True, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto') #viridis_r
     ax.set_ylim([0.01, ymax])
