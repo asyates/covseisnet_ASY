@@ -113,6 +113,8 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=No
         #append result for each day
         snr_freq_array[:,d] = snrArray
 
+    #cmap='Spectral'
+    cmap='RdYlGn'
     #plot, also determining if vmin or vmax has been set
     if np.isnan(vmin) and np.isnan(vmax):
         #print(np.max(snr_freq_array[:,:-1]))
@@ -120,13 +122,13 @@ def plotSNR(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=No
         #vmin=0
         vmax = np.nanquantile(snr_freq_array[:,:-1],0.999)
 
-        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap="jet", shading='auto')
+        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap=cmap, shading='auto')
     elif np.isnan(vmin):
-        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap="jet", shading='auto')
+        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap=cmap, shading='auto')
     elif np.isnan(vmax):
-        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=vmin, cmap="jet", shading='auto')
+        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=vmin, cmap=cmap, shading='auto')
     else:
-        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=vmin, vmax=vmax, cmap="jet", shading='auto')
+        img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=vmin, vmax=vmax, cmap=cmap, shading='auto')
 
     #fig.colorbar(img, ax=ax).set_label('SNR  ('+str(minlagwin)+'-'+str(maxlagwin)+'s lag)')
     fig.colorbar(img, ax=ax).set_label('SNR')
@@ -331,8 +333,9 @@ def plotPhaseStack(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None
     
     #vmin=0.25
     vmax = np.nanquantile(snr_freq_array[:,:-1],0.999)
-
-    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap="jet", shading='auto', vmax=vmax)
+    
+    cmap='RdYlGn' 
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, cmap=cmap, shading='auto', vmax=vmax)
     #fig.colorbar(img, ax=ax).set_label('PhSyn betw stacks  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
     fig.colorbar(img, ax=ax).set_label('Phase Stack Amp')
 
@@ -460,7 +463,7 @@ def plotStackCC(CCFparams, startdate, enddate, minlagwin, maxlagwin, maxstack=5,
 
 
 
-    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=2, cmap="gist_rainbow", shading='auto')
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=2, cmap="RdYlGn_r", shading='auto')
     #fig.colorbar(img, ax=ax).set_label('PhSyn betw stacks  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
     fig.colorbar(img, ax=ax).set_label('Stacksize (CC = '+str(cc_thres)+')')
 
@@ -606,7 +609,7 @@ def compute_PhaseStack(ccfarray, fs, smooth_win = 10, median=True):
 
     return ampenv_smoothed
 
-def plotInterferogram(CCFparams, startdate, enddate, frange, fig=None, ax=None, stacksuffix=''):
+def plotInterferogram(CCFparams, startdate, enddate, frange, fig=None, ax=None, stacksuffix='', norm=False):
 
     #reassign variables
     noisedir = CCFparams[0]
@@ -640,6 +643,9 @@ def plotInterferogram(CCFparams, startdate, enddate, frange, fig=None, ax=None, 
         #get stack corresponding to stacksize for given day, and also array of 1-day ccfs
         stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix) 
         
+        if norm == True:
+            stack = stack / np.max(np.abs(stack))
+
         ccf_array[:,d] = stack
 
     #define the 99% percentile of data for visualisation purposes
@@ -705,7 +711,7 @@ def plotSNR_time(CCFparams, startdate, enddate, frange, filt='01', stacksuffix='
         day = convertDatetime64ToStr(ccfdates[d])
 
         #get stack corresponding to stacksize for given day, and also array of 1-day ccfs
-        stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix) 
+        stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix, filt=filt) 
         
         #calculate snr of ccfs
         period = 1.0/centfreq
@@ -742,7 +748,7 @@ def plotSNR_time(CCFparams, startdate, enddate, frange, filt='01', stacksuffix='
 
     vmax = np.percentile(snr_array,99)
 
-    img = ax.pcolormesh(ccfdates, x, snr_array[:,:-1], rasterized=True, vmax=vmax, cmap="jet", shading='auto')
+    img = ax.pcolormesh(ccfdates, x, snr_array[:,:-1], rasterized=True, vmax=vmax, cmap="Spectral_r", shading='auto')
     #fig.colorbar(img, ax=ax[0])
     fig.colorbar(img, ax=ax).set_label("SNR")
     ax.set_ylabel('lag time (s)')
@@ -798,7 +804,7 @@ def plotPhaseStack_time(CCFparams, startdate, enddate, frange, filt='01', stacks
         day = convertDatetime64ToStr(ccfdates[d])
 
         #get stack corresponding to stacksize for given day, and also array of 1-day ccfs
-        stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix) 
+        stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix, filt=filt) 
         
         #calculate snr of ccfs
         period = 1.0/centfreq
@@ -835,7 +841,7 @@ def plotPhaseStack_time(CCFparams, startdate, enddate, frange, filt='01', stacks
 
     #vmax = np.percentile(snr_array,95)
 
-    img = ax.pcolormesh(ccfdates, x, snr_array[:,:-1], rasterized=True, cmap="jet", shading='auto')
+    img = ax.pcolormesh(ccfdates, x, snr_array[:,:-1], rasterized=True, cmap="Spectral_r", shading='auto')
     #fig.colorbar(img, ax=ax[0])
     fig.colorbar(img, ax=ax).set_label("Phase Stack")
     ax.set_ylabel('lag time (s)')
@@ -901,17 +907,17 @@ def get_interstation_distance(net1, stat1, net2, stat2):
 
     df = pd.read_csv(workdir+'/'+'station_info.csv', header=0)
     
-   
+    #print(stat2, net2) 
     stat1_info = df.loc[(df['station'] == stat1) & (df['network'] == net1)]
     stat2_info = df.loc[(df['station'] == stat2) & (df['network'] == net2)]
     
-    print(stat1_info)
-    print(stat2_info)
+    #print(stat1_info)
+    #print(stat2_info)
 
-    lat1 = stat1_info['latitude']
-    lon1 = stat1_info['longitude']
-    lat2 = stat2_info['latitude']
-    lon2 = stat2_info['longitude']
+    lat1 = stat1_info['latitude'].values[0]
+    lon1 = stat1_info['longitude'].values[0]
+    lat2 = stat2_info['latitude'].values[0]
+    lon2 = stat2_info['longitude'].values[0]
 
     distance = getDistance(lat1,lon1,lat2,lon2)
 
