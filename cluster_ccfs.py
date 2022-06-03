@@ -1,5 +1,5 @@
 import sys
-from scipy import signal
+from scipy import signal, interpolate
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform 
 from scipy.spatial import distance
@@ -147,6 +147,32 @@ def stretchdata(ccf_array, value, fs, maxlag):
         ccf_array_stretched[i] = ccf_stretched
 
     return ccf_array_stretched
+
+def stretchccf_stretchtime(ccf, dvv , maxlag, fs):
+
+    scalefact = 1+(1*dvv)
+
+    #maxlag = 120
+    samprate = 1.0/fs
+
+    lagtimes_orig = np.arange(-1*maxlag, maxlag+samprate, samprate)
+    lagtimes_new = np.arange(-1*maxlag, maxlag+samprate, samprate)*scalefact
+
+    
+    #print(lagtimes_new)
+    #print(len(lagtimes_new), len(ccf))
+
+    f = interpolate.interp1d(lagtimes_new, ccf, fill_value='extrapolate')
+
+    #fig0, ax0 = plt.subplots()
+
+    #ax0.plot(lagtimes_orig, ccf)
+    #ax0.plot(lagtimes_orig, f(lagtimes_orig))
+
+    #plt.show()
+
+    return f(lagtimes_orig)
+
 
 def sliceCCFs(CCFparams, ccf_array, minlagwin, maxlagwin, norm=False):
 
