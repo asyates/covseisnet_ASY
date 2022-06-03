@@ -806,12 +806,21 @@ def plotPhaseStack_time(CCFparams, startdate, enddate, frange, filt='01', stacks
         #get stack corresponding to stacksize for given day, and also array of 1-day ccfs
         stack, ccfarray =  getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix, filt=filt) 
         
+
+        #check if array (i.e. not nan)
+        if isinstance(stack, (list, tuple, np.ndarray)):
+
         #calculate snr of ccfs
-        period = 1.0/centfreq
-        phasestack = compute_PhaseStack(ccfarray, fs, smooth_win=period)
+            period = 1.0/centfreq
+            phasestack = compute_PhaseStack(ccfarray, fs, smooth_win=period)
         
-        snr_array[:,d] = phasestack
+            snr_array[:,d] = phasestack
         
+        else:
+            arr = np.empty(len(x))
+            arr[:] = np.nan
+            snr_array[:,d] = arr
+
         #calculate asymmetry
         #posamp = np.max(stack[posidx+1:])
         #negamp = np.max(stack[:negidx])
