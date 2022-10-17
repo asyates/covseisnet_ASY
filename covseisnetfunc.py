@@ -9,13 +9,19 @@ import matplotlib.dates as dates
 from usefulFuncs import *
 from obspy import UTCDateTime
 from obspy import Stream
-from obspy import read
+from obspy import read, read_inventory 
 import numpy as np
 import os
 from datetime import datetime, timedelta
 import math
 from matplotlib.ticker import (MultipleLocator)
 import matplotlib.font_manager
+import elevation
+import rasterio
+import scipy.interpolate
+from matplotlib.patches import RegularPolygon
+import matplotlib.colors as mcolors
+from matplotlib.colors import LightSource
 
 
 plt.rcParams["font.family"] = 'sans-serif'
@@ -24,7 +30,7 @@ plt.rcParams['axes.linewidth']=1
 
 workdir = '/home/yatesal/covseisnet_ASY/'
 
-def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', stations=[], printstream=False, freqmin=0.01, freqmax=10.0):
+def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', stations=[], printstream=False, freqmin=0.01, freqmax=10.0, correct_response=False):
 
     currentdate = UTCDateTime(startdate)
     enddate = UTCDateTime(enddate)
@@ -39,7 +45,8 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Processing day %d, year %d, from data in folder %s' % (currentdate.julday, currentdate.year, folder))  
 
         try:
-            st = getDayWaveform(folder, channel, currentdate, stations)
+            st = getDayWaveform(folder, channel, currentdate, stations, correct_response=correct_response)
+
         except Exception as e:
             print('Error reading data')
             print(str(e))
@@ -88,7 +95,7 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
 
             #compute spectral width
             try:
-                times, frequencies, spectral_width = computeSpectralWidth(tmp_st, window_duration_sec, average) 
+                times, frequencies, spectral_width, covariances = computeSpectralWidth(tmp_st, window_duration_sec, average) 
                 
                 timesarray[tmpcount] = times + (tmpcount*tmpwinsize)
                 swarray[tmpcount] = spectral_width.T
@@ -124,14 +131,13 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
 
     print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': ***FINISHED***')
 
-
 def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqmax=10, st_size=86400):
  
     #remove stations with missing data
     maxpts = len(max(st,key=len))
     for tr in st:
-        #print(tr)
-        #print(getPercentZero(tr.data))    
+        print(tr)
+        print(getPercentZero(tr.data))    
         if len(tr) < (maxpts * 0.95) or getPercentZero(tr.data) > 0.05: #allow 5% missing data or less than 5% zeroed data 
             st.remove(tr)
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
@@ -142,13 +148,18 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
         st.decimate(dfac)
 
         #synchronise
-        st = st.synchronize(start=currentdate, duration_sec = st_size, method="linear")
+        try:
+            st = st.synchronize(start=currentdate, duration_sec = st_size, method="linear")
+        except:
+            print('problem synchronizing... skipping')
+
 
         #preprocess using smooth spectral whitening and temporal normalization
-        st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
         st.detrend('linear')
         st.detrend('demean')
         st.taper(0.05)
+        st.filter('bandpass', freqmin=freqmin, freqmax=freqmax, zerophase=True)
+
 
         #fig, ax = plt.subplots()
         #ax.plot(np.arange(len(st[0].data)),st[0].data)
@@ -174,7 +185,7 @@ def computeSpectralWidth(st, window_duration_sec, average):
     #calculate spectral width
     spectral_width = covariances.coherence(kind="spectral_width")
 
-    return times, frequencies, spectral_width
+    return times, frequencies, spectral_width, covariances
 
 
 def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, vmin=None, vmax=None, log=True, count=False, norm=False, fig=None, ax=None, ax_cb=None):
@@ -346,34 +357,53 @@ def normalize_sw(spectral_width):
    for i in range(col):
         spectral_width[:,i] = spectral_width[:,i] / np.max(spectral_width[:,i])
 
-def getDayWaveform(datapath, channel, date, stations):
+def getDayWaveform(datapath, channel, date, stations, correct_response=False):
 
     st_jday = date.julday
     st_year = date.year
     
-    st = csn.arraystream.ArrayStream()
+    stream = csn.arraystream.ArrayStream()
 
+    #account for alternative julday formatting in filename (e.g. 001 instead of 1)
+    alt_fmt = '{:03d}'.format(st_jday)
+    
     if channel == '*':
         channel = ''
 
     for root, dirs, files in os.walk(datapath+'/'+str(st_year)):        
         for file in files: 
-            if file.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)):
+            fname = file
+            if fname.endswith('.MSEED'):
+                fname = fname[:-6]
+            if fname.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)) or fname.endswith(channel+'.D.'+str(st_year)+'.'+alt_fmt):
+                stat = file.split('.')[1]
                 if len(stations) == 0:
-                    st += read(root+'/'+file)
+                    st = read(root+'/'+file)
+                    if correct_response == True:
+                        #correct instrument response
+                        print('correcting response for '+stat+' station')
+                        inv = read_inventory('inventory/'+stat+'.xml')
+                        pre_filt = [0.001, 0.005, 15, 20]
+                        st.remove_response(inventory=inv, pre_filt=pre_filt, output="VEL",water_level=60, plot=False)
+
+                    st.merge(fill_value=0)
+                    stream.append(st[0])
                 else:
-                    for stat in stations:
-                        if file.find(stat) != -1:
-                            st += read(root+'/'+file)
-       
-    #print(st)  
-    st.detrend('linear')
-    st.detrend('demean')
-
-    st.merge(fill_value=0)   
-    #print(st)
-
-    return st   
+                    if stat in stations:
+                        print(root+'/'+file)
+                        st = read(root+'/'+file)
+                        if correct_response == True:
+                            print('correcting response for '+stat+' station')
+                            inv = read_inventory('inventory/'+stat+'.xml')
+                            pre_filt = [0.001, 0.005, 15, 20]
+                            st.remove_response(inventory=inv, pre_filt=pre_filt, output="VEL",water_level=60, plot=False)
+                        st.merge(fill_value=0)   
+                        stream.append(st[0])
+ 
+    stream.detrend('linear')
+    stream.detrend('demean')
+     
+    return stream   
 
 def readCovOutput(directory, date, statcount):
         
