@@ -16,12 +16,10 @@ from datetime import datetime, timedelta
 import math
 from matplotlib.ticker import (MultipleLocator)
 import matplotlib.font_manager
-import elevation
-import rasterio
 import scipy.interpolate
-from matplotlib.patches import RegularPolygon
-import matplotlib.colors as mcolors
-from matplotlib.colors import LightSource
+
+
+
 
 
 plt.rcParams["font.family"] = 'sans-serif'
