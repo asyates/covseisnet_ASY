@@ -883,9 +883,18 @@ def plotSNR_time(CCFparams, startdate, enddate, frange, filt='01', stacksuffix='
         
         #calculate snr of ccfs
         period = 1.0/centfreq
-        snr, ampenv, noise = compute_ccf_snr(ccfarray, fs, smooth_win=period, norm=norm)
-        snr_array[:,d] = snr
         
+        #check if array (i.e. not nan)
+        if isinstance(stack, (list, tuple, np.ndarray)):
+
+            snr, ampenv, noise = compute_ccf_snr(ccfarray, fs, smooth_win=period, norm=norm)
+            snr_array[:,d] = snr
+        else:
+            
+            arr = np.empty(len(x))
+            arr[:] = np.nan
+            snr_array[:,d] = arr
+
         #calculate asymmetry
         #posamp = np.max(stack[posidx+1:])
         #negamp = np.max(stack[:negidx])
