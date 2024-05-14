@@ -63,8 +63,8 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
 
         #st.plot()
 
-        #split data into subdaily chunks (here, currently 6 hours)
-        tmpwinsize = 21600*4
+        #split data into subdaily chunks (hard-coded as 1-day for now)
+        tmpwinsize = 86400
         numtmpwin = int(86400/tmpwinsize)
         statcountarray = np.zeros(numtmpwin)
         timesarray = np.empty(numtmpwin, dtype=object)
@@ -348,7 +348,7 @@ def plot_sw(fig, ax, times, frequencies, spectral_width, log, vmin=None, vmax=No
     print("Data type of frequencies:", frequencies.dtype)
     print("Data type of spectral_width:", spectral_width.dtype)
 
-    img = ax.pcolormesh(times[:-1].astype(float), frequencies, spectral_width, rasterized=True, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto') #viridis_r
+    img = ax.pcolormesh(times.astype(float), frequencies, spectral_width, rasterized=True, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto') #viridis_r
     ax.set_ylim([0.01, ymax])
     
     if log==True:
