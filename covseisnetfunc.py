@@ -193,7 +193,7 @@ def computeSpectralWidth(st, window_duration_sec, average):
     return times, frequencies, spectral_width, covariances
 
 
-def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, vmin=None, vmax=None, log=True, count=False, norm=False, fig=None, ax=None, ax_cb=None, downsamp=1):
+def plotSpectralWidth(directory, startdate, enddate, winlenhr=24, vmin=None, vmax=None, log=True, count=False, norm=False, fig=None, ax=None, ax_cb=None, downsamp=1):
 
     startdateplot = np.datetime64(startdate)
     enddateplot = np.datetime64(enddate)+1
