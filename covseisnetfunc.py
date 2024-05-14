@@ -143,7 +143,7 @@ def preProcessStream(st, currentdate, fs_target, norm, spectral, freqmin=0.01, f
     maxpts = len(max(st,key=len))
     for tr in st:
         print(tr)
-        print(getPercentZero(tr.data))    
+        print('Percentage zeros in data:'+ str(getPercentZero(tr.data)))    
         if len(tr) < (maxpts * 0.95) or getPercentZero(tr.data) > 0.05: #allow 5% missing data or less than 5% zeroed data 
             st.remove(tr)
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
