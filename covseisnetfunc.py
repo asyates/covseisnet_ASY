@@ -28,7 +28,7 @@ plt.rcParams['axes.linewidth']=1
 
 workdir = '/home/yatesal/covseisnet_ASY/'
 
-def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, dfac = 4, norm='onebit', spectral = 'onebit', stations=[], printstream=False, freqmin=0.01, freqmax=10.0, correct_response=False):
+def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100, window_duration_sec =100, fs_target = 25, norm='onebit', spectral = 'onebit', stations=[], printstream=False, freqmin=0.01, freqmax=10.0, correct_response=False):
 
     currentdate = UTCDateTime(startdate)
     enddate = UTCDateTime(enddate)
@@ -61,9 +61,10 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         if printstream==True:
             print(st)
 
+        #st.plot()
 
         #split data into subdaily chunks (here, currently 6 hours)
-        tmpwinsize = 21600
+        tmpwinsize = 21600*4
         numtmpwin = int(86400/tmpwinsize)
         statcountarray = np.zeros(numtmpwin)
         timesarray = np.empty(numtmpwin, dtype=object)
@@ -76,9 +77,8 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
         #process smaller chunks of data
         for tmp_st in st.slide(window_length=tmpwinsize, step=tmpwinsize):
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Processing %.2f hour time slice.' % (tmpwinsize/3600.0)) 
-
             #pre-processing
-            tmp_st = preProcessStream(tmp_st, currentdate+(tmpcount*tmpwinsize), dfac, norm, spectral, freqmin=freqmin, freqmax=freqmax, st_size = tmpwinsize)
+            tmp_st = preProcessStream(tmp_st, currentdate+(tmpcount*tmpwinsize), fs_target, norm, spectral, freqmin=freqmin, freqmax=freqmax, st_size = tmpwinsize)
             
             if len(tmp_st) == 0 or len(tmp_st) == 1:
                 print('Error: Zero or one stream left after pre-processing, skipping day')
@@ -129,8 +129,16 @@ def run_covseisnet(folder, channel, startdate, enddate, writeoutdir, average=100
 
     print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': ***FINISHED***')
 
-def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqmax=10, st_size=86400):
+def preProcessStream(st, currentdate, fs_target, norm, spectral, freqmin=0.01, freqmax=10, st_size=86400):
  
+
+    #downsample
+    for tr in st:
+        samp_rate = tr.stats.sampling_rate
+        dfac = samp_rate/fs_target
+
+        tr.decimate(int(dfac))
+
     #remove stations with missing data
     maxpts = len(max(st,key=len))
     for tr in st:
@@ -141,9 +149,6 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
 
     if len(st) != 0:
-                
-        #downsample data
-        st.decimate(dfac)
 
         #synchronise
         try:
@@ -172,10 +177,17 @@ def preProcessStream(st, currentdate, dfac, norm, spectral, freqmin=0.01, freqma
             st.preprocess(domain="temporal", method=norm)
         else:
             print('skipping temporal normalization')
-            
+       
+        #st.plot()
+
     return st
 
 def computeSpectralWidth(st, window_duration_sec, average):
+
+    print(st[0].data[0], st[0].data[-1])
+    print(st[1].data[0], st[1].data[-1])
+    print(st[2].data[0], st[2].data[-1])
+    #st.plot()
 
     #calculate covariance from stream
     times, frequencies, covariances = csn.covariancematrix.calculate(st, window_duration_sec, average)
@@ -186,7 +198,7 @@ def computeSpectralWidth(st, window_duration_sec, average):
     return times, frequencies, spectral_width, covariances
 
 
-def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, vmin=None, vmax=None, log=True, count=False, norm=False, fig=None, ax=None, ax_cb=None):
+def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, vmin=None, vmax=None, log=True, count=False, norm=False, fig=None, ax=None, ax_cb=None, downsamp=1):
 
     startdateplot = np.datetime64(startdate)
     enddateplot = np.datetime64(enddate)+1
@@ -233,7 +245,7 @@ def plotSpectralWidth(directory, startdate, enddate, winlenhr=6, vmin=None, vmax
     else:
         if plot==True:
             fig, ax = plt.subplots(figsize=(12,4))
-        plot_sw(fig, ax, times, frequencies, spectral_width, log, norm=norm, ax_cb = ax_cb, vmin=vmin, vmax=vmax)
+        plot_sw(fig, ax, times, frequencies, spectral_width, log, norm=norm, ax_cb = ax_cb, vmin=vmin, vmax=vmax, downsamp=downsamp)
 
     if plot==True:
         plt.show()
@@ -286,10 +298,17 @@ def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
         try: 
             times, frequencies, spectral_width, statcount = readCovOutput(directory, currentdate, count)
         except:
+
             times = np.zeros(times.shape)
             spectral_width = np.empty(spectral_width.shape)
             spectral_width[:] = np.nan
             statcount = np.zeros(int(24/winlenhr))
+            #times = np.zeros((29,)) #HARD-CODED!!
+            #frequencies = np.linspace(0,25,5000)
+            #spectral_width = np.empty((4999,28)) #HARD-CODED!! DANGER
+
+            #spectral_width[:] = np.nan
+            #statcount = np.zeros(int(24/winlenhr))
 
         currdatearr = fillArray(dates.date2num(currentdate.datetime), len(times))
         times_all[i] = currdatearr + times/86400.0
@@ -312,7 +331,7 @@ def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
     return times_all, frequencies, spectral_width_all, statcount_all
 
 
-def plot_sw(fig, ax, times, frequencies, spectral_width, log, vmin=None, vmax=None, ymax=10, norm=False, ax_cb=None):
+def plot_sw(fig, ax, times, frequencies, spectral_width, log, vmin=None, vmax=None, ymax=10, norm=False, ax_cb=None, downsamp=1):
    
     cmap='RdYlBu' 
     
@@ -321,7 +340,15 @@ def plot_sw(fig, ax, times, frequencies, spectral_width, log, vmin=None, vmax=No
     if vmax == None:
         vmax=np.nanmax(spectral_width)
 
-    img = ax.pcolormesh(times, frequencies, spectral_width, rasterized=True, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto') #viridis_r
+    if downsamp != 1:
+        times = times[::downsamp]
+        spectral_width = spectral_width[:, ::downsamp]
+
+    print("Data type of times:", times.dtype)
+    print("Data type of frequencies:", frequencies.dtype)
+    print("Data type of spectral_width:", spectral_width.dtype)
+
+    img = ax.pcolormesh(times[:-1].astype(float), frequencies, spectral_width, rasterized=True, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto') #viridis_r
     ax.set_ylim([0.01, ymax])
     
     if log==True:
@@ -397,7 +424,7 @@ def getDayWaveform(datapath, channel, date, stations, correct_response=False):
                             st.remove_response(inventory=inv, pre_filt=pre_filt, output="VEL",water_level=60, plot=False)
                         st.merge(fill_value=0)   
                         stream.append(st[0])
- 
+
     stream.detrend('linear')
     stream.detrend('demean')
      
