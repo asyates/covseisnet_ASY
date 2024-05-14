@@ -184,11 +184,6 @@ def preProcessStream(st, currentdate, fs_target, norm, spectral, freqmin=0.01, f
 
 def computeSpectralWidth(st, window_duration_sec, average):
 
-    print(st[0].data[0], st[0].data[-1])
-    print(st[1].data[0], st[1].data[-1])
-    print(st[2].data[0], st[2].data[-1])
-    #st.plot()
-
     #calculate covariance from stream
     times, frequencies, covariances = csn.covariancematrix.calculate(st, window_duration_sec, average)
 
@@ -344,9 +339,9 @@ def plot_sw(fig, ax, times, frequencies, spectral_width, log, vmin=None, vmax=No
         times = times[::downsamp]
         spectral_width = spectral_width[:, ::downsamp]
 
-    print("Data type of times:", times.dtype)
-    print("Data type of frequencies:", frequencies.dtype)
-    print("Data type of spectral_width:", spectral_width.dtype)
+    #print("Data type of times:", times.dtype)
+    #print("Data type of frequencies:", frequencies.dtype)
+    #print("Data type of spectral_width:", spectral_width.dtype)
 
     img = ax.pcolormesh(times.astype(float), frequencies, spectral_width, rasterized=True, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto') #viridis_r
     ax.set_ylim([0.01, ymax])
