@@ -245,7 +245,7 @@ def plotSpectralWidth(directory, startdate, enddate, winlenhr=24, vmin=None, vma
     if plot==True:
         plt.show()
 
-def plotTraceCount(directory, startdate, enddate, fig=None, ax=None, winlenhr=6):
+def plotTraceCount(directory, startdate, enddate, fig=None, ax=None, winlenhr=24):
 
     startdateplot = np.datetime64(startdate)
     enddateplot = np.datetime64(enddate)+1
