@@ -18,10 +18,6 @@ from matplotlib.ticker import (MultipleLocator)
 import matplotlib.font_manager
 import scipy.interpolate
 
-
-
-
-
 plt.rcParams["font.family"] = 'sans-serif'
 plt.rcParams["font.sans-serif"] = ['Verdana']
 plt.rcParams['axes.linewidth']=1
@@ -168,12 +164,12 @@ def preProcessStream(st, currentdate, fs_target, norm, spectral, freqmin=0.01, f
         #ax.plot(np.arange(len(st[0].data)),st[0].data)
         #plt.show()
 
-        if spectral != None:
+        if (spectral != None) or (spectral == 'None'):
             st.preprocess(domain="spectral", method=spectral)
         else:
             print('skipping spectral whitening')
 
-        if norm != None:
+        if (norm != None) or (norm == 'None'):
             st.preprocess(domain="temporal", method=norm)
         else:
             print('skipping temporal normalization')
