@@ -13,16 +13,262 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.dates as dates
 import matplotlib.colors as colors
+from mpl_toolkits.basemap import Basemap
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from scipy import signal
 from scipy.signal import hilbert
 from math import comb
 import itertools
+from matplotlib import cm
+import matplotlib as mpl
+from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter1d
+
+
 
 workdir = '/home/yatesal/covseisnet_ASY'
 
+import numpy as np
+from datetime import timedelta
+import matplotlib.pyplot as plt
+
+def plotPhaseStack_freq(CCFparams, startdate, enddate, stacksuffix='', norm=False, fig=None, ax=None, vmin=None, vmax=None):
+
+    # reassign variables
+    noisedir = CCFparams[0]
+    network = CCFparams[1]
+    loc = CCFparams[2]
+    stat1 = CCFparams[3]
+    stat2 = CCFparams[4]
+    component = CCFparams[5]
+    stacksize = CCFparams[6]
+    fs = CCFparams[7]
+    maxlag = CCFparams[8]
+
+    # convert dates to UTCDatetime and designate startdate
+    enddate_dt = convertDateStrToDatetime(enddate)
+    startdate_dt = convertDateStrToDatetime(startdate)
+
+    # create lag times array
+    samprate = 1.0 / fs
+    lag_times = np.arange(-1 * maxlag, maxlag + samprate, samprate)
+
+    # get frequency filters and central frequencies
+    filtlowhigh, centfreqs = getFilters()
+
+    # initialize array to store average SNR values for each frequency and lag time
+    avg_snr_array = np.empty((len(lag_times), len(centfreqs)))
+
+    # loop over each frequency filter
+    for f in range(len(filtlowhigh)):
+
+        frange = filtlowhigh[f]
+        centfreq = centfreqs[f]
+        print(frange)
+
+        # create date array and reading single day files
+        ccfdates = np.arange(startdate_dt, enddate_dt + timedelta(days=1), timedelta(days=1))
+        snr_array = np.empty((len(lag_times), len(ccfdates)))
+
+        # calculate SNR for each day
+        for d in range(len(ccfdates)):
+            day = convertDatetime64ToStr(ccfdates[d])
+
+            # get stack corresponding to stacksize for given day, and also array of 1-day ccfs
+            stack, ccfarray = getCCFStack(noisedir, network, stat1, stat2, stacksize, day, frange, fs, loc=loc, component=component, stacksuffix=stacksuffix)
+
+            if isinstance(stack, (list, tuple, np.ndarray)):
+                # calculate snr of ccfs
+                period = 1.0 / centfreq
+                phasestack = compute_PhaseStack(ccfarray, fs, smooth_win=period)
+                snr_array[:, d] = phasestack
+
+            else:
+                arr = np.empty(len(lag_times))
+                arr[:] = np.nan
+                snr_array[:, d] = arr
+
+        # calculate average SNR across all days for this frequency
+        avg_snr_array[:, f] = np.nanmean(snr_array, axis=1)
+
+    # plot average SNR colormap
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(11, 4))
+        plot = True
+    else:
+        plot = False
+
+    # Sigma is the standard deviation of the Gaussian filter, adjust as needed.
+
+    # Define your sampling interval and desired smoothing window
+    smoothing_window = 5.0  # in seconds
+
+    # Calculate σ so that 3σ is equal to the smoothing window size
+    sigma = smoothing_window / (3 * samprate)  # in number of samples
+
+    # Smoothing the data
+    avg_snr_array_smoothed = gaussian_filter1d(avg_snr_array.T, sigma, axis=1)
+
+    #plot, also determining if vmin or vmax has been set
+    #cmap = 'RdYlGn'
+    cmap='Spectral_r'
+    if np.isnan(vmin) and np.isnan(vmax):
+        img = ax.pcolormesh(lag_times, centfreqs, avg_snr_array_smoothed, rasterized=True, cmap=cmap, shading='auto')
+    elif np.isnan(vmin):
+        img = ax.pcolormesh(lag_times, centfreqs, avg_snr_array_smoothed, rasterized=True, cmap=cmap, shading='auto', vmax=vmax)
+    elif np.isnan(vmax):
+        img = ax.pcolormesh(lag_times, centfreqs, avg_snr_array_smoothed, rasterized=True, cmap=cmap, shading='auto', vmin=vmin)
+    else:
+        img = ax.pcolormesh(lag_times, centfreqs, avg_snr_array_smoothed, rasterized=True, cmap=cmap, shading='auto', vmin=vmin, vmax=vmax)
+
+
+
+    #if vmin == None:
+    #    img = ax.pcolormesh(lag_times, centfreqs, avg_snr_array_smoothed, rasterized=True, cmap=cmap, shading='auto')
+
+    fig.colorbar(img, ax=ax).set_label("Average Phase Stack")
+    ax.set_xlabel('lag time (s)')
+    ax.set_ylabel('Frequency (Hz)')
+    
+    if plot == True:
+        plt.show()
+
+def plotPhaseMap(CCFparams, region, stats, enddate, frange, minlagwin, maxlagwin, fig=None, ax=None, v=1.0, stacksuffix=''):
+
+    #v = ballistic velocity (km/s)
+
+    if fig == None or ax == None:
+        fig, ax = plt.subplots(figsize=(11,4))
+        plot=True
+    else:
+        plot=False
+
+    #reassign variables
+    noisedir = CCFparams[0]
+    network = CCFparams[1]
+    loc = CCFparams[2]
+    component = CCFparams[5]
+    stacksize = CCFparams[6]
+    fs = CCFparams[7]
+    maxlag = CCFparams[8]
+
+    #create lag time array
+    samprate = 1.0/fs
+    lagtimes = np.arange(-1*maxlag, maxlag+samprate, samprate)
+
+
+    #Draw map
+    m = Basemap(projection='merc', resolution='h', llcrnrlat=region[2], urcrnrlat=region[3], llcrnrlon=region[0], urcrnrlon=region[1],lat_ts=20, ax=ax)
+    m.fillcontinents(color='lightgrey',lake_color='aqua')
+    m.drawmapboundary(fill_color='aqua')
+
+    #draw stations
+    #stats=['DRZ','FWVZ','MOVZ','MTVZ','NGZ','OTVZ','PKVZ','TRVZ','TUVZ','WNVZ','WPVZ']
+    #stats=['FWVZ','MOVZ','MTVZ','NGZ','OTVZ','PKVZ','TRVZ','TUVZ','WNVZ','WPVZ']
+    stat_lats = []
+    stat_lons = []
+    for i, stat in enumerate(stats):
+        lat, lon = getLatLonStat(stat, 'NZ')
+        x0, y0 = m(lon, lat)
+        stat_lats.append(lat)
+        stat_lons.append(lon)
+        m.plot(x0, y0, marker='D', color='black')
+
+    #create date array and reading single day files
+    enddate_dt = convertDateStrToDatetime(enddate)
+    ccfdates = np.arange(enddate_dt-timedelta(days=stacksize), enddate_dt, timedelta(days=1))
+    
+    #create list of different station-pairs
+    pairs=list(itertools.combinations(stats,2))
+
+    #define color map
+    cmap = plt.cm.get_cmap('RdYlGn')
+    cmap_min=0
+    cmap_max=1.0
+    cmap_range = cmap_max - cmap_min
+
+    # Create a list of tuples where each tuple is (pair, distance)
+    pairs_with_distances = [(pair, get_interstation_distance(network, pair[0], network, pair[1])) for pair in pairs]
+
+    # Sort the list of tuples by the distance (which is the second element of each tuple)
+    pairs_sorted_by_distance = sorted(pairs_with_distances, key=lambda x: x[1], reverse=True)
+
+    # Extract the sorted pairs
+    sorted_pairs = [pair for pair, distance in pairs_sorted_by_distance]
+
+    #re-order pairs list such that in decreasing order of interstation distance
+
+    for pair in sorted_pairs:
+
+        stat1=pair[0]
+        stat2=pair[1]
+
+        #read CCFs
+        days_found, st = getCCFs_1day(noisedir, network, stat1, stat2, ccfdates, fs, loc=loc, component=component, stacksuffix=stacksuffix)
+        
+        #filter CCFs
+        flow = frange[0]
+        fhigh = frange[1]
+        centfreq = (fhigh-flow)/2
+        centperiod = 1.0/centfreq
+
+        st_filt = st.copy()
+        st_filt.taper(0.05)
+        st_filt.filter("bandpass", freqmin=flow, freqmax=fhigh, zerophase=True, corners=4)
+
+        #convert to 2D numpy array
+        ccfs_1day = np.empty(len(st), dtype=object)
+        for i in range(len(st)):
+            ccfs_1day[i] = st_filt[i].data
+
+        #calculate phase stack amplitude
+        if len(ccfs_1day) >= (stacksize/2):
+
+            phasestack = compute_PhaseStack(ccfs_1day, fs, smooth_win=centperiod)
+            if minlagwin == None:
+                 distance = get_interstation_distance(network, stat1, network, stat2) #get distance between stations
+                 minlagwin_used = distance / v
+
+            if maxlagwin == None:
+               #print(period)
+                maxlagwin0 = int(minlagwin_used + centperiod*10)
+            else:
+                maxlagwin0 = maxlagwin
+
+            minidx_psnr = np.abs(lagtimes-minlagwin_used).argmin()
+            minidx_nsnr = np.abs(lagtimes-minlagwin_used*-1).argmin()
+
+            maxidx_psnr = np.abs(lagtimes-maxlagwin0).argmin()
+            maxidx_nsnr = np.abs(lagtimes-maxlagwin0*-1).argmin()
+
+            #get snr values within SNR window (positive and negative)
+            snr_p = phasestack[minidx_psnr:maxidx_psnr+1]
+            snr_n = phasestack[maxidx_nsnr:minidx_nsnr+1]
+
+            #average both negative and positive lag time snr
+            avgSNR = np.mean([snr_p, snr_n])
+
+            color_value = ((avgSNR-cmap_min)/cmap_range)
+            snr_color = cm.colors.rgb2hex(cmap(color_value))
+
+            lat0, lon0, lat1, lon1 = getLatLonStatpair(pair, 'NZ')
+            lons, lats = m([lon0, lon1], [lat0, lat1])
+            m.plot(lons, lats, color=str(snr_color), ax=ax) #currently won't work with ax=None!!
+
+        else:
+            print('not enough data for station pair: '+str(pair))
+            print(frange, enddate)
+
+
+    #fig.colorbar(mpl.cm.ScalarMappable(norm=None, cmap=cmap), ax=ax, label='Phase Stack Amplitude')
+
+    if plot == True:
+        plt.show()
+
+
+
 #plot SNR of CCFs    
-def plotSNR2(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=None, vmin=np.nan, vmax=np.nan, stacksuffix='', norm=False):
+def plotSNR2(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=None, vmin=np.nan, vmax=np.nan, stacksuffix='', norm=False, save=False):
 
     #reassign variables
     noisedir = CCFparams[0]
@@ -135,6 +381,12 @@ def plotSNR2(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=N
 
     cmap='RdYlGn'
     
+    if save==True:
+        fp = '/home/yatesal/covseisnet_ASY/outputs_QC/SNR/'
+        fname = 'snr_'+stat1+'_'+stat2
+        np.save(fp+fname, snr_matrix)
+
+
     #plot, also determining if vmin or vmax has been set
     if np.isnan(vmin) and np.isnan(vmax):
 
@@ -297,7 +549,7 @@ def getFilters():
 
     return filtlowhigh, centfreqs
 
-def plotAmpAsymmetry(CCFparams, startdate, enddate, fig=None, ax=None, stacksuffix='', minlag = 5):
+def plotAmpAsymmetry(CCFparams, startdate, enddate, fig=None, ax=None, stacksuffix='', minlag = 5, log=True):
 
     #reassign variables
     noisedir = CCFparams[0]
@@ -372,13 +624,16 @@ def plotAmpAsymmetry(CCFparams, startdate, enddate, fig=None, ax=None, stacksuff
 
     img = ax.pcolormesh(ccfdates, centfreqs, asym_freq_array[:,:-1], rasterized=True, cmap="seismic", shading='auto', vmin=maxasym*-1, vmax=maxasym)
     fig.colorbar(img, ax=ax).set_label(asymLabel)
-    ax.set_yscale('log')
+   
+    if log == True:
+        ax.set_yscale('log')
+    
     ax.set_ylabel('Frequency (Hz)')           
 
     if plot == True:
         plt.show()
 
-def plotAmpAsymmetry2(CCFparams, startdate, enddate, fig=None, ax=None, stacksuffix='', minlag = 5):
+def plotAmpAsymmetry2(CCFparams, startdate, enddate, fig=None, ax=None, stacksuffix='', minlag = 5, log=True, vmin=np.nan, vmax=np.nan, save=False):
 
     #reassign variables
     noisedir = CCFparams[0]
@@ -401,7 +656,7 @@ def plotAmpAsymmetry2(CCFparams, startdate, enddate, fig=None, ax=None, stacksuf
     filtlowhigh, centfreqs = getFilters()
 
     #create date array and reading single day files
-    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    ccfdates = np.arange(startdate_dt-timedelta(days=10), enddate_dt+timedelta(days=1), timedelta(days=1))
     asym_freq_array = np.empty((len(centfreqs), len(ccfdates)))
    
     #create lag time array
@@ -474,19 +729,31 @@ def plotAmpAsymmetry2(CCFparams, startdate, enddate, fig=None, ax=None, stacksuf
         #append result for each day
         asym_freq_array[f,:] = asym_dates
 
+    if save==True:
+        fp = '/home/yatesal/covseisnet_ASY/outputs_QC/AmpRatio/'
+        fname = 'ampratio_'+stat1+'_'+stat2
+        np.save(fp+fname, asym_freq_array)
+
     #get maximum value of asymmetry
     maxasym = np.nanmax(np.abs(asym_freq_array)) 
     asymLabel = 'Amp. Ratio (log$_{2}$)'
+    if np.isnan(vmin):
+        vmin= maxasym*-1
+    if np.isnan(vmax):
+        vmax= maxasym
 
-    img = ax.pcolormesh(ccfdates, centfreqs, asym_freq_array[:,:-1], rasterized=True, cmap="seismic", shading='auto', vmin=maxasym*-1, vmax=maxasym)
+    img = ax.pcolormesh(ccfdates, centfreqs, asym_freq_array[:,:-1], rasterized=True, cmap="seismic", shading='auto', vmin=vmin, vmax=vmax)
     fig.colorbar(img, ax=ax).set_label(asymLabel)
-    ax.set_yscale('log')
+    
+    if log == True:
+        ax.set_yscale('log')
+    
     ax.set_ylabel('Frequency (Hz)')           
 
     if plot == True:
         plt.show()
 
-def plotPhaseStack2(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=None, stacksuffix=''):
+def plotPhaseStack2(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=None, ax=None, stacksuffix='', vmin=np.nan, vmax=np.nan, save=False):
     #Note that CCFparams = [noisedir, network, loc, stat1, stat2, component, stacksize, fs, maxlag]   
 
     #reassign variables
@@ -512,7 +779,7 @@ def plotPhaseStack2(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=Non
 
 
     #create date array and reading single day files
-    ccfdates = np.arange(startdate_dt, enddate_dt+timedelta(days=1), timedelta(days=1))
+    ccfdates = np.arange(startdate_dt-timedelta(days=10), enddate_dt+timedelta(days=1), timedelta(days=1))
     phase_freq_array = np.empty((len(centfreqs),len(ccfdates)))
   
     #create lag time array
@@ -595,12 +862,27 @@ def plotPhaseStack2(CCFparams, startdate, enddate, minlagwin, maxlagwin, fig=Non
 
         #append result for each day
         phase_freq_array[f,:] = snr_dates
-    
-    #vmin=0.25
-    vmax = np.nanquantile(phase_freq_array[:,:-1],0.999)
-    
+        
+    if save==True:
+        fp = '/home/yatesal/covseisnet_ASY/outputs_QC/Phase/'
+        fname = 'phase_'+stat1+'_'+stat2
+        np.save(fp+fname, phase_freq_array)
+
     cmap='RdYlGn' 
-    img = ax.pcolormesh(ccfdates, centfreqs, phase_freq_array[:,:-1], rasterized=True, cmap=cmap, shading='auto', vmax=vmax)
+    #cmap='RdYlBu_r'
+
+    if np.isnan(vmin) and np.isnan(vmax):
+        vmax = np.nanquantile(phase_freq_array[:,:-1],0.999)
+
+        img = ax.pcolormesh(ccfdates, centfreqs, phase_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap=cmap, shading='auto')
+    elif np.isnan(vmin):
+        img = ax.pcolormesh(ccfdates, centfreqs, phase_freq_array[:,:-1], rasterized=True, vmax=vmax, cmap=cmap, shading='auto')
+    elif np.isnan(vmax):
+        img = ax.pcolormesh(ccfdates, centfreqs, phase_freq_array[:,:-1], rasterized=True, vmin=vmin, cmap=cmap, shading='auto')
+    else:
+        img = ax.pcolormesh(ccfdates, centfreqs, phase_freq_array[:,:-1], rasterized=True, vmin=vmin, vmax=vmax, cmap=cmap, shading='auto')
+
+
     #fig.colorbar(img, ax=ax).set_label('PhSyn betw stacks  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
     fig.colorbar(img, ax=ax).set_label('Phase Stack Amp')
 
@@ -839,9 +1121,9 @@ def plotStackCC(CCFparams, startdate, enddate, minlagwin, maxlagwin, maxstack=30
 
 
 
-    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=2, cmap="RdYlGn_r", shading='auto')
+    img = ax.pcolormesh(ccfdates, centfreqs, snr_freq_array[:,:-1], rasterized=True, vmin=2, vmax=maxstack, cmap="RdYlGn_r", shading='auto')
     #fig.colorbar(img, ax=ax).set_label('PhSyn betw stacks  '+str(minlagwin)+'-'+str(maxlagwin)+' lag')
-    fig.colorbar(img, ax=ax).set_label('Stacksize (CC = '+str(cc_thres)+')')
+    fig.colorbar(img, ax=ax).set_label('SS (CC = '+str(cc_thres)+')')
 
     ax.set_yscale('log')
     ax.set_ylabel('Frequency (Hz)')
@@ -1006,7 +1288,7 @@ def compute_PhaseStack(ccfarray, fs, smooth_win = 10, median=True):
 
     return ampenv_smoothed
 
-def plotInterferogram(CCFparams, startdate, enddate, frange, fig=None, ax=None, stacksuffix='', norm=False, filt='01'):
+def plotInterferogram(CCFparams, startdate, enddate, frange, fig=None, ax=None, stacksuffix='', norm=False, filt='01', swapaxis=False):
 
     #reassign variables
     noisedir = CCFparams[0]
@@ -1054,13 +1336,23 @@ def plotInterferogram(CCFparams, startdate, enddate, frange, fig=None, ax=None, 
     else:
         plot = False
 
-    img = ax.pcolormesh(ccfdates, lagtimes, ccf_array[:,:-1], vmin=-clim, vmax=clim, rasterized=True, cmap='seismic')
-    fig.colorbar(img, ax=ax).set_label('')
+    if swapaxis==False:
+        img = ax.pcolormesh(ccfdates, lagtimes, ccf_array[:,:-1], vmin=-clim, vmax=clim, rasterized=True, cmap='seismic')
+        fig.colorbar(img, ax=ax).set_label('')
     
     #plt.colorbar()
-    ax.set_title('Interferogram')
-    ax.set_ylabel('Lag Time (s)')
-    ax.set_xlim(np.datetime64(startdate), np.datetime64(enddate))
+    #ax.set_title('Interferogram')
+        ax.set_ylabel('Lag Time (s)')
+        ax.set_xlim(np.datetime64(startdate), np.datetime64(enddate))
+
+    else:
+
+        img = ax.pcolormesh(lagtimes, ccfdates, ccf_array[:,:-1].T, vmin=-clim, vmax=clim, rasterized=True, cmap='seismic')
+        fig.colorbar(img, ax=ax).set_label('')
+    
+        ax.set_xlabel('Lag Time (s)')
+        #ax.set_ylim(np.datetime64(startdate), np.datetime64(enddate))
+
 
     if plot == True:
         plt.show()
@@ -1308,7 +1600,7 @@ def plot_spectogram(inputfile, startdate, enddate, classic=True, demean=False,no
 
     fig.colorbar(mesh, ax=ax)
     ax.set_ylabel('Frequency (Hz)')
-    ax.set_yscale('log')
+    #ax.set_yscale('log')
     ax.set_xlabel('Time')
     #ax.set_title(inputfile)
     ax.set_xlim(pd.Timestamp(startdate), pd.Timestamp(enddate))
