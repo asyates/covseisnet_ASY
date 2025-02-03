@@ -295,7 +295,7 @@ def plotTraceCount(directory, startdate, enddate, fig=None, ax=None, winlenhr=24
 
     #ax.yaxis.set_major_locator(MultipleLocator(5))
 
-def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=6):
+def getSpectralWidthData(directory, startdate, enddate, count, winlenhr=24):
 
     currentdate = startdate
     numdays = int((enddate - currentdate)/86400)+1 #+1 to include enddate
