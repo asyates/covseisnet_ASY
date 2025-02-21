@@ -3,20 +3,17 @@
 # flake8: noqa
 
 import covseisnet as csn
-import obspy
 import matplotlib.pyplot as plt
 import matplotlib.dates as dates
 from usefulFuncs import *
-from obspy import UTCDateTime
-from obspy import Stream
+from obspy import UTCDateTime, Stream
 from obspy import read, read_inventory 
 import numpy as np
 import os
 from datetime import datetime, timedelta
 import math
 from matplotlib.ticker import (MultipleLocator)
-import matplotlib.font_manager
-import scipy.interpolate
+import fnmatch
 
 plt.rcParams["font.family"] = 'sans-serif'
 plt.rcParams["font.sans-serif"] = ['Verdana']
@@ -157,7 +154,7 @@ def preProcessStream(st, currentdate, st_size=86400, **kwargs):
     maxpts = len(max(st,key=len))
     for tr in st:
         print(tr)
-        print('Percentage zeros in data:'+ str(getPercentZero(tr.data)))    
+        #print('Percentage zeros in data:'+ str(getPercentZero(tr.data)))    
         if len(tr) < (maxpts * 0.95) or getPercentZero(tr.data) > 0.05: #allow 5% missing data or less than 5% zeroed data 
             st.remove(tr)
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S")+': Trace with missing data removed, %d traces remaining' % len(st))
@@ -412,15 +409,13 @@ def getDayWaveform(datapath, channel, date, stations, correct_response=False):
     #account for alternative julday formatting in filename (e.g. 001 instead of 1)
     alt_fmt = '{:03d}'.format(st_jday)
     
-    if channel == '*':
-        channel = ''
 
     for root, dirs, files in os.walk(datapath+'/'+str(st_year)):        
         for file in files: 
             fname = file
             if fname.endswith('.MSEED'):
                 fname = fname[:-6]
-            if fname.endswith(channel+'.D.'+str(st_year)+'.'+str(st_jday)) or fname.endswith(channel+'.D.'+str(st_year)+'.'+alt_fmt):
+            if fnmatch.fnmatch(fname, f"*.{channel}.D.{st_year}.{st_jday}") or fnmatch.fnmatch(fname, f"*.{channel}.D.{st_year}.{alt_fmt}"):
                 stat = file.split('.')[1]
                 if len(stations) == 0:
                     st = read(root+'/'+file)
@@ -445,8 +440,9 @@ def getDayWaveform(datapath, channel, date, stations, correct_response=False):
                         st.merge(fill_value=0)   
                         stream.append(st[0])
 
-    stream.detrend('linear')
-    stream.detrend('demean')
+    print(len(st))
+    #stream.detrend('linear')
+    #stream.detrend('demean')
      
     return stream   
 
