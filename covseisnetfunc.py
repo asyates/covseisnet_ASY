@@ -142,13 +142,22 @@ def preProcessStream(st, currentdate, st_size=86400, **kwargs):
     freqmin = kwargs.get("freqmin", 0.01)
     freqmax = kwargs.get("freqmax", 10.0)
     whiten_wlen = kwargs.get("whiten_wlen", 50)    
+    resampling_method = kwargs.get("resampling_method", "decimation")  # Default to decimation
+    lanczos_a = kwargs.get("lanczos_a", 1.0)  # Parameter for Lanczos filter width
 
     #downsample
     for tr in st:
         samp_rate = tr.stats.sampling_rate
-        dfac = samp_rate/fs_target
-
-        tr.decimate(int(dfac))
+        if resampling_method.lower() == "lanczos":
+            print(f"Resampling {tr.id} from {samp_rate}Hz to {fs_target}Hz using Lanczos interpolation (a={lanczos_a})")
+            tr.data = np.array(tr.data)
+            tr.interpolate(method="lanczos", sampling_rate=fs_target, a=lanczos_a)
+        else: #decimate
+            dfac = samp_rate/fs_target
+            if dfac >= 1:
+                tr.decimate(int(dfac))
+            else:
+                print(f"Warning: Cannot decimate {tr.id} from {samp_rate}Hz to {fs_target}Hz, keeping original")
 
     #remove stations with missing data
     maxpts = len(max(st,key=len))
