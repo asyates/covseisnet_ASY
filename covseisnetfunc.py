@@ -142,13 +142,22 @@ def preProcessStream(st, currentdate, st_size=86400, **kwargs):
     freqmin = kwargs.get("freqmin", 0.01)
     freqmax = kwargs.get("freqmax", 10.0)
     whiten_wlen = kwargs.get("whiten_wlen", 50)    
+    resampling_method = kwargs.get("resampling_method", "decimation")  # Default to decimation
+    lanczos_a = kwargs.get("lanczos_a", 1.0)  # Parameter for Lanczos filter width
 
     #downsample
     for tr in st:
         samp_rate = tr.stats.sampling_rate
-        dfac = samp_rate/fs_target
-
-        tr.decimate(int(dfac))
+        if resampling_method.lower() == "lanczos":
+            print(f"Resampling {tr.id} from {samp_rate}Hz to {fs_target}Hz using Lanczos interpolation (a={lanczos_a})")
+            tr.data = np.array(tr.data)
+            tr.interpolate(method="lanczos", sampling_rate=fs_target, a=lanczos_a)
+        else: #decimate
+            dfac = samp_rate/fs_target
+            if dfac >= 1:
+                tr.decimate(int(dfac))
+            else:
+                print(f"Warning: Cannot decimate {tr.id} from {samp_rate}Hz to {fs_target}Hz, keeping original")
 
     #remove stations with missing data
     maxpts = len(max(st,key=len))
@@ -447,9 +456,11 @@ def getDayWaveform(datapath, channel, date, stations, correct_response=False):
     return stream   
 
 def readCovOutput(directory, date, statcount):
-        
-    filename = str(date.year)+'_'+str(date.julday)+'.npy'
-    #print(filename)
+    filename = str(date.year) + '_' + '{:03d}'.format(date.julday) + '.npy'    
+    if not os.path.exists(filepath):
+        # If not, try not-padded format (e.g., "2019_1.npy")
+        filename = str(date.year)+'_'+str(date.julday)+'.npy'
+    
     covresult = np.load(workdir+'outputs/'+directory+'/'+filename, allow_pickle=True)        
 
     times = covresult[0]
@@ -475,7 +486,8 @@ def saveCovOutput(directory, date, times, freq, spectral_width, statcount):
     output[1] = freq
     output[2] = spectral_width
     output[3] = statcount
-    filename = str(date.year)+'_'+str(date.julday)
+    #filename = str(date.year)+'_'+str(date.julday)
+    filename = str(date.year) + '_' + '{:03d}'.format(date.julday)
     
     np.save(directory+'/'+filename, output)
 
