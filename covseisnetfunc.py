@@ -456,9 +456,11 @@ def getDayWaveform(datapath, channel, date, stations, correct_response=False):
     return stream   
 
 def readCovOutput(directory, date, statcount):
-        
-    filename = str(date.year)+'_'+str(date.julday)+'.npy'
-    #print(filename)
+    filename = str(date.year) + '_' + '{:03d}'.format(date.julday) + '.npy'    
+    if not os.path.exists(filepath):
+        # If not, try not-padded format (e.g., "2019_1.npy")
+        filename = str(date.year)+'_'+str(date.julday)+'.npy'
+    
     covresult = np.load(workdir+'outputs/'+directory+'/'+filename, allow_pickle=True)        
 
     times = covresult[0]
@@ -484,7 +486,8 @@ def saveCovOutput(directory, date, times, freq, spectral_width, statcount):
     output[1] = freq
     output[2] = spectral_width
     output[3] = statcount
-    filename = str(date.year)+'_'+str(date.julday)
+    #filename = str(date.year)+'_'+str(date.julday)
+    filename = str(date.year) + '_' + '{:03d}'.format(date.julday)
     
     np.save(directory+'/'+filename, output)
 
